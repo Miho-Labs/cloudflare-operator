@@ -30,8 +30,8 @@ type Server struct {
 	DNSRecords     map[string]DNSRecord // id -> record
 	Tunnels        map[string]Tunnel    // id -> tunnel
 	TunnelConfigs  map[string]TunnelConfig
-	Buckets        map[string]Bucket     // name -> bucket
-	APITokens      map[string]APIToken   // id -> token
+	Buckets        map[string]Bucket   // name -> bucket
+	APITokens      map[string]APIToken // id -> token
 	AccessApps     map[string]map[string]any
 	AccessGroups   map[string]map[string]any
 	ServiceTokens  map[string]ServiceToken
@@ -65,13 +65,14 @@ type DNSRecord struct {
 
 // Tunnel is a fake tunnel.
 type Tunnel struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Status      string     `json:"status"`
-	ConfigSrc   string     `json:"config_src"`
-	DeletedAt   *time.Time `json:"deleted_at"`
-	Connections []any      `json:"connections"`
-	Token       string     `json:"-"`
+	ID           string     `json:"id"`
+	Name         string     `json:"name"`
+	Status       string     `json:"status"`
+	ConfigSrc    string     `json:"config_src"`
+	RemoteConfig bool       `json:"remote_config"`
+	DeletedAt    *time.Time `json:"deleted_at"`
+	Connections  []any      `json:"connections"`
+	Token        string     `json:"-"`
 }
 
 // TunnelConfig is a fake remote tunnel configuration.
@@ -464,7 +465,7 @@ func (s *Server) createTunnel(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	t := Tunnel{ID: newID(), Name: body.Name, Status: "inactive", ConfigSrc: body.ConfigSrc, Connections: []any{}, Token: "tok-" + newID()}
+	t := Tunnel{ID: newID(), Name: body.Name, Status: "inactive", ConfigSrc: body.ConfigSrc, RemoteConfig: body.ConfigSrc == "cloudflare", Connections: []any{}, Token: "tok-" + newID()}
 	s.Tunnels[t.ID] = t
 	writeJSON(w, 200, t)
 }
