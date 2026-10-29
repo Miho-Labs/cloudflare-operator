@@ -1,0 +1,293 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.23.0
+  name: tunnelingresses.cloudflare.miho-labs.dev
+spec:
+  group: cloudflare.miho-labs.dev
+  names:
+    kind: TunnelIngress
+    listKind: TunnelIngressList
+    plural: tunnelingresses
+    shortNames:
+    - cfingress
+    singular: tunnelingress
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.tunnelRef.name
+      name: Tunnel
+      type: string
+    - jsonPath: .spec.hostname
+      name: Hostname
+      type: string
+    - jsonPath: .status.serviceURL
+      name: Service
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: TunnelIngress publishes one hostname (an "app") through a Tunnel.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: TunnelIngressSpec defines one public hostname served by a
+              Tunnel.
+            properties:
+              dns:
+                description: DNS controls the CNAME record for the hostname.
+                properties:
+                  comment:
+                    description: Comment attached to the DNS record.
+                    type: string
+                  deletionPolicy:
+                    default: Delete
+                    description: DeletionPolicy for the DNS record.
+                    enum:
+                    - Delete
+                    - Retain
+                    type: string
+                  enabled:
+                    default: true
+                    description: Enabled creates a proxied CNAME record "<hostname>
+                      -> <tunnelID>.cfargotunnel.com".
+                    type: boolean
+                  zone:
+                    description: Zone the record belongs to. Defaults to the longest
+                      registered zone that matches the hostname.
+                    properties:
+                      id:
+                        description: ID of the zone (32 hex characters).
+                        type: string
+                      name:
+                        description: Name of the zone, e.g. "example.com".
+                        type: string
+                    type: object
+                    x-kubernetes-validations:
+                    - message: exactly one of zone.name or zone.id must be set
+                      rule: has(self.name) != has(self.id)
+                type: object
+              hostname:
+                description: Hostname served through the tunnel, e.g. "app.example.com".
+                minLength: 1
+                type: string
+              originRequest:
+                description: OriginRequest overrides the tunnel-wide origin settings
+                  for this hostname.
+                properties:
+                  caPool:
+                    description: CAPool is a path to a CA bundle inside the cloudflared
+                      container.
+                    type: string
+                  connectTimeout:
+                    description: ConnectTimeout in seconds for establishing a connection
+                      to the origin.
+                    type: integer
+                  disableChunkedEncoding:
+                    description: DisableChunkedEncoding disables chunked transfer
+                      encoding to the origin.
+                    type: boolean
+                  http2Origin:
+                    description: HTTP2Origin connects to the origin with HTTP/2.
+                    type: boolean
+                  httpHostHeader:
+                    description: HTTPHostHeader sets the Host header sent to the origin.
+                    type: string
+                  keepAliveConnections:
+                    description: KeepAliveConnections is the maximum number of idle
+                      keep-alive connections.
+                    type: integer
+                  keepAliveTimeout:
+                    description: KeepAliveTimeout in seconds before an idle keep-alive
+                      connection is closed.
+                    type: integer
+                  noHappyEyeballs:
+                    description: NoHappyEyeballs disables the "happy eyeballs" IPv4/IPv6
+                      algorithm.
+                    type: boolean
+                  noTLSVerify:
+                    description: NoTLSVerify disables TLS verification of the origin
+                      certificate.
+                    type: boolean
+                  originServerName:
+                    description: OriginServerName is the SNI hostname used when connecting
+                      to a TLS origin.
+                    type: string
+                  proxyType:
+                    description: ProxyType is "" for a plain proxy or "socks" for
+                      a SOCKS5 proxy.
+                    enum:
+                    - ""
+                    - socks
+                    type: string
+                  tcpKeepAlive:
+                    description: TCPKeepAlive in seconds.
+                    type: integer
+                  tlsTimeout:
+                    description: TLSTimeout in seconds for the TLS handshake with
+                      the origin.
+                    type: integer
+                type: object
+              path:
+                description: Path restricts the rule to requests whose path matches
+                  this regular expression.
+                type: string
+              service:
+                description: Service is the origin cloudflared forwards to.
+                properties:
+                  name:
+                    description: Name of a Kubernetes Service in the same namespace.
+                      Mutually exclusive with url.
+                    type: string
+                  port:
+                    description: Port of the Service. Required when name is set.
+                    format: int32
+                    maximum: 65535
+                    minimum: 1
+                    type: integer
+                  scheme:
+                    default: http
+                    description: Scheme used with name/port.
+                    enum:
+                    - http
+                    - https
+                    - tcp
+                    - ssh
+                    - rdp
+                    - smb
+                    - unix
+                    type: string
+                  url:
+                    description: |-
+                      URL of the origin, e.g. "http://my-svc.default.svc.cluster.local:8080", "tcp://db:5432"
+                      or "http_status:404". Mutually exclusive with name.
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - message: exactly one of service.url or service.name must be set
+                  rule: has(self.url) != has(self.name)
+              tunnelRef:
+                description: TunnelRef selects the Tunnel (same namespace) this hostname
+                  is attached to.
+                properties:
+                  name:
+                    description: Name of the referenced object.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - hostname
+            - service
+            - tunnelRef
+            type: object
+          status:
+            description: TunnelIngressStatus is the observed state of a TunnelIngress.
+            properties:
+              conditions:
+                description: Conditions describe the current state of the resource.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              dnsRecordName:
+                description: DNSRecordName is the DNSRecord resource created for this
+                  hostname.
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the metadata.generation the status
+                  reflects.
+                format: int64
+                type: integer
+              serviceURL:
+                description: ServiceURL is the resolved origin URL pushed to the tunnel
+                  configuration.
+                type: string
+              tunnelID:
+                description: TunnelID of the tunnel this rule is attached to.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

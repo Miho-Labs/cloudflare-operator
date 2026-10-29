@@ -1,0 +1,97 @@
+name: Release
+
+# Publishes, for a tag vX.Y.Z:
+#   - container image  ghcr.io/<owner>/cloudflare-operator:X.Y.Z (+ X.Y, latest)
+#   - Helm chart       oci://ghcr.io/<owner>/charts/cloudflare-operator:X.Y.Z
+#   - a GitHub Release with the chart archive and a rendered install.yaml
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  CHART: charts/cloudflare-operator
+
+jobs:
+  image:
+    name: Publish container image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: VERSION=${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  chart:
+    name: Publish Helm chart and GitHub release
+    runs-on: ubuntu-latest
+    needs: [image]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Compute version and registry path
+        id: vars
+        run: |
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+      - name: Lint
+        run: helm lint "$CHART"
+      - name: Package
+        run: |
+          helm package "$CHART" \
+            --version "${{ steps.vars.outputs.version }}" \
+            --app-version "${{ steps.vars.outputs.version }}" \
+            --destination dist
+      - name: Render install.yaml
+        run: |
+          helm template cloudflare-operator "dist/cloudflare-operator-${{ steps.vars.outputs.version }}.tgz" \
+            --namespace cloudflare-operator --include-crds > dist/install.yaml
+      - name: Push chart to GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+          helm push "dist/cloudflare-operator-${{ steps.vars.outputs.version }}.tgz" "oci://ghcr.io/${{ steps.vars.outputs.owner }}/charts"
+      - name: GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/cloudflare-operator-${{ steps.vars.outputs.version }}.tgz
+            dist/install.yaml
+          body: |
+            ## Install
+
+            ```bash
+            helm upgrade --install cloudflare-operator \
+              oci://ghcr.io/${{ steps.vars.outputs.owner }}/charts/cloudflare-operator \
+              --version ${{ steps.vars.outputs.version }} \
+              --namespace cloudflare-operator --create-namespace
+            ```
+
+            Image: `ghcr.io/${{ steps.vars.outputs.owner }}/cloudflare-operator:${{ steps.vars.outputs.version }}`
+            (linux/amd64, linux/arm64). `install.yaml` is the chart rendered with default values, CRDs included.

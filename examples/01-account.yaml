@@ -1,0 +1,21 @@
+# Step 1: the API token and the account every other resource refers to.
+# See docs/getting-started.md for how to create the token and find the Account ID.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudflare-api-token
+  namespace: cloudflare-operator
+type: Opaque
+stringData:
+  apiToken: "REPLACE_WITH_YOUR_API_TOKEN"
+---
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: CloudflareAccount
+metadata:
+  name: main
+spec:
+  accountID: "0123456789abcdef0123456789abcdef" # 32 hex characters from the dashboard
+  apiTokenSecretRef:
+    name: cloudflare-api-token
+    namespace: cloudflare-operator
+    key: apiToken

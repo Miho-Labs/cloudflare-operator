@@ -1,0 +1,21 @@
+apiVersion: v2
+name: cloudflare-operator
+description: Kubernetes operator that manages Cloudflare Tunnels, DNS records, R2 buckets and Zero Trust Access from custom resources.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.28.0-0"
+home: https://github.com/miho-labs/cloudflare-operator
+sources:
+  - https://github.com/miho-labs/cloudflare-operator
+keywords:
+  - cloudflare
+  - tunnel
+  - cloudflared
+  - r2
+  - zero-trust
+  - dns
+  - operator
+maintainers:
+  - name: Miho Labs
+    url: https://github.com/miho-labs
