@@ -1,0 +1,27 @@
+cloudflare-operator {{ .Chart.AppVersion }} is installed in namespace {{ .Release.Namespace }}.
+
+Next steps:
+
+1. Create a Secret with your Cloudflare API token:
+
+     kubectl -n {{ .Release.Namespace }} create secret generic cloudflare-api-token \
+       --from-literal=apiToken=<token>
+
+2. Register the account (find the Account ID in the Cloudflare dashboard sidebar):
+
+     apiVersion: cloudflare.miho-labs.dev/v1alpha1
+     kind: CloudflareAccount
+     metadata:
+       name: main
+     spec:
+       accountID: <32 hex characters>
+       apiTokenSecretRef:
+         name: cloudflare-api-token
+         namespace: {{ .Release.Namespace }}
+
+3. Check it verified:
+
+     kubectl get cloudflareaccounts
+
+Then create Tunnel, TunnelIngress, DNSRecord, R2Bucket or AccessApplication resources.
+Documentation: https://github.com/miho-labs/cloudflare-operator/tree/main/docs
