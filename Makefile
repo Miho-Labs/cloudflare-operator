@@ -1,6 +1,9 @@
 # Image URL to use for docker build/push
 IMG ?= ghcr.io/miho-labs/cloudflare-operator:dev
 CHART := charts/cloudflare-operator
+# OCI registry the chart is pushed to by `make helm-push` and the release workflow.
+CHART_REGISTRY ?= oci://ghcr.io/miho-labs/charts
+CHART_VERSION ?= $(shell sed -n 's/^version: //p' $(CHART)/Chart.yaml)
 GOFLAGS ?= -mod=mod
 export GOFLAGS
 
@@ -62,6 +65,14 @@ helm-lint: ## Lint the chart.
 .PHONY: helm-template
 helm-template: ## Render the chart to stdout.
 	helm template cloudflare-operator $(CHART) --namespace cloudflare-operator
+
+.PHONY: helm-package
+helm-package: ## Package the chart into dist/ with CHART_VERSION.
+	helm package $(CHART) --version $(CHART_VERSION) --app-version $(CHART_VERSION) --destination dist
+
+.PHONY: helm-push
+helm-push: helm-package ## Push the packaged chart to CHART_REGISTRY (run `helm registry login ghcr.io` first).
+	helm push dist/cloudflare-operator-$(CHART_VERSION).tgz $(CHART_REGISTRY)
 
 .PHONY: install
 install: ## Install the operator with Helm into the cloudflare-operator namespace.

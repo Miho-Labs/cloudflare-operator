@@ -186,5 +186,22 @@ client pre-loaded with a verified account and a fake Cloudflare server. Cover at
 
 ## Releasing
 
-Tag `vX.Y.Z`. CI builds and pushes `ghcr.io/miho-labs/cloudflare-operator:X.Y.Z` for amd64 and
-arm64. Bump `version` and `appVersion` in `charts/cloudflare-operator/Chart.yaml` in the same change.
+Everything is published to the GitHub Container Registry by `.github/workflows/release.yaml`:
+
+1. Bump `version` and `appVersion` in `charts/cloudflare-operator/Chart.yaml` and merge.
+2. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
+3. The workflow builds the multi-arch image `ghcr.io/miho-labs/cloudflare-operator:0.2.0`
+   (plus `0.2` and `latest`), packages the chart with that version and pushes it to
+   `oci://ghcr.io/miho-labs/charts/cloudflare-operator`, and creates a GitHub release with the
+   chart archive and a rendered `install.yaml`.
+
+`ci.yaml` additionally pushes `:edge` and `:sha-<commit>` image tags from `main`.
+
+**First release only:** GitHub creates organisation packages as private. After the first run, open
+the org's *Packages* page, and for both `cloudflare-operator` and `charts/cloudflare-operator`
+choose *Package settings → Change visibility → Public* and confirm the package is linked to this
+repository (so the README and the `GITHUB_TOKEN` write access follow the repo). Public packages and
+Actions minutes are free for public repositories.
+
+Manual fallback: `make docker-build docker-push IMG=...` and
+`helm registry login ghcr.io && make helm-push CHART_VERSION=0.2.0`.

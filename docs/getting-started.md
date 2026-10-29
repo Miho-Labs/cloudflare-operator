@@ -59,11 +59,23 @@ curl -s https://api.cloudflare.com/client/v4/user/tokens/verify \
 
 ## 3. Install the operator
 
+The chart and the image are published to the GitHub Container Registry on every release
+(`ghcr.io/miho-labs/charts/cloudflare-operator` and `ghcr.io/miho-labs/cloudflare-operator`). Both
+are public; no registry login is needed.
+
 ```bash
-helm upgrade --install cloudflare-operator ./charts/cloudflare-operator \
+helm upgrade --install cloudflare-operator \
+  oci://ghcr.io/miho-labs/charts/cloudflare-operator --version 0.1.0 \
   --namespace cloudflare-operator --create-namespace
 kubectl -n cloudflare-operator rollout status deploy/cloudflare-operator
 ```
+
+Pick the version from the [releases page](https://github.com/miho-labs/cloudflare-operator/releases).
+Each release also ships `install.yaml`, the chart rendered with default values and CRDs included,
+for `kubectl apply --server-side -f install.yaml` without Helm.
+
+To install from a checkout instead (for example to run an unreleased build), use
+`./charts/cloudflare-operator` as the chart and set `image.tag=edge` for the image built from `main`.
 
 Useful values (see `charts/cloudflare-operator/values.yaml` for all of them):
 
@@ -75,10 +87,11 @@ Useful values (see `charts/cloudflare-operator/values.yaml` for all of them):
 | `metrics.serviceMonitor.enabled` | `false` | Create a Prometheus Operator `ServiceMonitor`. |
 
 The chart installs the CRDs from its `crds/` directory. Helm does not upgrade CRDs on
-`helm upgrade`; after upgrading the chart run:
+`helm upgrade`; after upgrading the chart apply the new CRDs from the matching release:
 
 ```bash
-kubectl apply --server-side -f charts/cloudflare-operator/crds/
+helm pull oci://ghcr.io/miho-labs/charts/cloudflare-operator --version <new version> --untar
+kubectl apply --server-side -f cloudflare-operator/crds/
 ```
 
 ## 4. Register the account

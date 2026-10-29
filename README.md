@@ -20,10 +20,17 @@ same natural key instead of duplicating them, corrects drift on a periodic resyn
 
 ## Quick start
 
+Releases are published to the GitHub Container Registry: the image as
+`ghcr.io/miho-labs/cloudflare-operator` and the Helm chart as an OCI artifact.
+
 ```bash
-helm upgrade --install cloudflare-operator ./charts/cloudflare-operator \
+helm upgrade --install cloudflare-operator \
+  oci://ghcr.io/miho-labs/charts/cloudflare-operator --version 0.1.0 \
   --namespace cloudflare-operator --create-namespace
 ```
+
+(From a checkout: `helm upgrade --install cloudflare-operator ./charts/cloudflare-operator ...`,
+which uses the image tag of the chart's `appVersion`; `edge` tracks `main`.)
 
 Create the token Secret and the account (see [Getting started](docs/getting-started.md) for how to
 create a token with the right permissions and where to find your Account ID):
@@ -91,7 +98,15 @@ rule to the tunnel configuration and creates the proxied CNAME `app.example.com`
   [AccessApplication](docs/resources/accessapplication.md), [AccessGroup](docs/resources/accessgroup.md),
   [AccessServiceToken](docs/resources/accessservicetoken.md).
 - [Troubleshooting](docs/troubleshooting.md)
-- [Contributing](CONTRIBUTING.md): development setup and a step-by-step guide for adding a new Cloudflare service.
+- [Contributing](CONTRIBUTING.md): development setup, releasing, and a step-by-step guide for adding a new Cloudflare service.
+
+## Releases
+
+| Artifact | Location |
+|----------|----------|
+| Container image (amd64, arm64) | `ghcr.io/miho-labs/cloudflare-operator:<version>`, `:latest`, `:edge` (main) |
+| Helm chart (OCI) | `oci://ghcr.io/miho-labs/charts/cloudflare-operator:<version>` |
+| Rendered manifests | `install.yaml` attached to each [GitHub release](https://github.com/miho-labs/cloudflare-operator/releases) |
 
 ## Requirements
 
