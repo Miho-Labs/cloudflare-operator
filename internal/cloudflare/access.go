@@ -102,11 +102,25 @@ type AccessApplication struct {
 	Policies                []AccessPolicy `json:"policies"`
 }
 
-// Equal compares the fields the operator manages, ignoring IDs and server-only fields.
+// Equal reports whether the remote application b already matches the desired application a.
+// IDs and server-only fields are ignored, and settings the desired state leaves unset (nil
+// pointers, empty session duration) accept whatever default Cloudflare applied.
 func (a AccessApplication) Equal(b AccessApplication) bool {
 	na, nb := a, b
 	na.ID, nb.ID, na.AUD, nb.AUD = "", "", "", ""
 	na.Type, nb.Type = "", ""
+	if na.SessionDuration == "" {
+		na.SessionDuration = nb.SessionDuration
+	}
+	if na.AppLauncherVisible == nil {
+		na.AppLauncherVisible = nb.AppLauncherVisible
+	}
+	if na.HTTPOnlyCookieAttribute == nil {
+		na.HTTPOnlyCookieAttribute = nb.HTTPOnlyCookieAttribute
+	}
+	if na.CORSHeaders == nil {
+		na.CORSHeaders = nb.CORSHeaders
+	}
 	na.Policies, nb.Policies = normalizePolicies(a.Policies), normalizePolicies(b.Policies)
 	if len(na.AllowedIdps) == 0 {
 		na.AllowedIdps = nil

@@ -152,5 +152,5 @@ Delete the custom resources first so the operator can clean up on Cloudflare (or
 ```bash
 kubectl delete tunnelingresses,tunnels,dnsrecords,r2buckets,accessapplications,accessgroups,accessservicetokens --all -A
 helm uninstall cloudflare-operator -n cloudflare-operator
-kubectl delete crd -l app.kubernetes.io/name=cloudflare-operator   # optional
+kubectl get crd -o name | grep cloudflare.miho-labs.dev | xargs kubectl delete   # optional
 ```

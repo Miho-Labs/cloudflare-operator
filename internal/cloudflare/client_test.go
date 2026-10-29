@@ -231,6 +231,30 @@ func TestAccess(t *testing.T) {
 	if !got.Equal(app) {
 		t.Fatalf("app should compare equal after round trip:\n%+v\n%+v", got, app)
 	}
+	// Server-applied defaults for settings the spec leaves unset are not drift.
+	visible := true
+	defaulted := *got
+	defaulted.AppLauncherVisible = &visible
+	defaulted.HTTPOnlyCookieAttribute = &visible
+	unsetApp := app
+	unsetApp.SessionDuration = ""
+	if !unsetApp.Equal(defaulted) {
+		t.Fatal("unset settings must accept server defaults")
+	}
+	if app.Equal(defaulted) == false {
+		t.Fatal("explicit session duration still compared")
+	}
+	changed := defaulted
+	changed.SessionDuration = "1h"
+	if app.Equal(changed) {
+		t.Fatal("explicit session duration mismatch must be drift")
+	}
+	explicitHidden := app
+	hidden := false
+	explicitHidden.AppLauncherVisible = &hidden
+	if explicitHidden.Equal(defaulted) {
+		t.Fatal("explicit appLauncherVisible mismatch must be drift")
+	}
 	byDomain, err := c.FindAccessApplicationByDomain(ctx, "app.example.com")
 	if err != nil || byDomain == nil || byDomain.ID != created.ID {
 		t.Fatalf("find by domain: %v %+v", err, byDomain)
