@@ -1,0 +1,53 @@
+# Zero Trust Access: a reusable group, a service token for CI, and an application
+# protecting app.example.com with two policies.
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: AccessGroup
+metadata:
+  name: engineering
+  namespace: default
+spec:
+  accountRef:
+    name: main
+  include:
+    - emailDomains: ["example.com"]
+  exclude:
+    - emails: ["contractor@example.com"]
+---
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: AccessServiceToken
+metadata:
+  name: ci
+  namespace: default
+spec:
+  accountRef:
+    name: main
+  duration: 8760h            # one year; refreshed automatically 30 days before expiry
+  secretName: ci-access-credentials   # CF_ACCESS_CLIENT_ID / CF_ACCESS_CLIENT_SECRET
+---
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: AccessApplication
+metadata:
+  name: app
+  namespace: default
+spec:
+  accountRef:
+    name: main
+  name: Internal App
+  domain: app.example.com
+  sessionDuration: 24h
+  appLauncherVisible: true
+  policies:
+    # Policies are evaluated in order. Machine clients first:
+    - name: ci-service-token
+      decision: non_identity
+      include:
+        - serviceTokens:
+            - name: ci          # AccessServiceToken in the same namespace
+    # Then humans from the engineering group, only from the office network.
+    - name: engineering
+      decision: allow
+      include:
+        - groups:
+            - name: engineering # AccessGroup in the same namespace
+      require:
+        - ips: ["198.51.100.0/24"]

@@ -26,15 +26,15 @@ const (
 
 // Condition reasons shared by all resources.
 const (
-	ReasonReconciling     = "Reconciling"
-	ReasonSynced          = "Synced"
-	ReasonAccountNotReady = "AccountNotReady"
-	ReasonAccountNotFound = "AccountNotFound"
-	ReasonInvalidSpec     = "InvalidSpec"
-	ReasonAPIError        = "CloudflareAPIError"
+	ReasonReconciling        = "Reconciling"
+	ReasonSynced             = "Synced"
+	ReasonAccountNotReady    = "AccountNotReady"
+	ReasonAccountNotFound    = "AccountNotFound"
+	ReasonInvalidSpec        = "InvalidSpec"
+	ReasonAPIError           = "CloudflareAPIError"
 	ReasonDependencyNotReady = "DependencyNotReady"
-	ReasonDeleting        = "Deleting"
-	ReasonRetained        = "Retained"
+	ReasonDeleting           = "Deleting"
+	ReasonRetained           = "Retained"
 )
 
 // DeletionPolicy controls what happens to the Cloudflare object when the Kubernetes object is deleted.

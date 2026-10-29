@@ -23,19 +23,23 @@ type AccessRule map[string]any
 
 // Rule constructors. Each returns a single-key rule object as the Access API expects.
 
-func RuleEmail(email string) AccessRule { return AccessRule{"email": map[string]string{"email": email}} }
+func RuleEmail(email string) AccessRule {
+	return AccessRule{"email": map[string]string{"email": email}}
+}
 func RuleEmailDomain(domain string) AccessRule {
 	return AccessRule{"email_domain": map[string]string{"domain": domain}}
 }
-func RuleEveryone() AccessRule       { return AccessRule{"everyone": map[string]string{}} }
-func RuleIP(cidr string) AccessRule  { return AccessRule{"ip": map[string]string{"ip": cidr}} }
+func RuleEveryone() AccessRule      { return AccessRule{"everyone": map[string]string{}} }
+func RuleIP(cidr string) AccessRule { return AccessRule{"ip": map[string]string{"ip": cidr}} }
 func RuleCountry(cc string) AccessRule {
 	return AccessRule{"geo": map[string]string{"country_code": cc}}
 }
 func RuleLoginMethod(idpID string) AccessRule {
 	return AccessRule{"login_method": map[string]string{"id": idpID}}
 }
-func RuleGroup(groupID string) AccessRule { return AccessRule{"group": map[string]string{"id": groupID}} }
+func RuleGroup(groupID string) AccessRule {
+	return AccessRule{"group": map[string]string{"id": groupID}}
+}
 func RuleServiceToken(tokenID string) AccessRule {
 	return AccessRule{"service_token": map[string]string{"token_id": tokenID}}
 }

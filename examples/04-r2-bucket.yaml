@@ -1,0 +1,38 @@
+# An R2 bucket with an S3-compatible credential scoped to that bucket only.
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: R2Bucket
+metadata:
+  name: uploads
+  namespace: default
+spec:
+  accountRef:
+    name: main
+  name: acme-uploads          # bucket name on Cloudflare, defaults to metadata.name
+  locationHint: weur
+  apiToken:
+    enabled: true
+    permission: read-write    # read-only | read-write | admin
+    secretName: uploads-r2    # defaults to <name>-r2-credentials
+  deletionPolicy: Retain      # keep the data if the object is deleted
+---
+# Consume the credentials from any S3 SDK.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: uploader
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: uploader}
+  template:
+    metadata:
+      labels: {app: uploader}
+    spec:
+      containers:
+        - name: app
+          image: amazon/aws-cli:2.22.0
+          command: ["sh", "-c", "aws s3 ls s3://$BUCKET_NAME && sleep infinity"]
+          envFrom:
+            - secretRef:
+                name: uploads-r2   # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_ENDPOINT_URL, AWS_REGION, BUCKET_NAME

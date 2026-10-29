@@ -8,7 +8,7 @@ import (
 	"sort"
 
 	cf "github.com/cloudflare/cloudflare-go/v7"
-		"github.com/cloudflare/cloudflare-go/v7/shared"
+	"github.com/cloudflare/cloudflare-go/v7/shared"
 	"github.com/cloudflare/cloudflare-go/v7/zero_trust"
 )
 

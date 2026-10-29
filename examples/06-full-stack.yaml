@@ -1,0 +1,63 @@
+# Everything together: a web app served through a tunnel, protected by Access, storing files in R2.
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: Tunnel
+metadata:
+  name: prod
+  namespace: shop
+spec:
+  accountRef:
+    name: main
+---
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: TunnelIngress
+metadata:
+  name: admin
+  namespace: shop
+spec:
+  tunnelRef:
+    name: prod
+  hostname: admin.example.com
+  service:
+    name: shop-admin
+    port: 80
+---
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: AccessApplication
+metadata:
+  name: admin
+  namespace: shop
+spec:
+  accountRef:
+    name: main
+  domain: admin.example.com
+  policies:
+    - name: staff
+      decision: allow
+      include:
+        - emailDomains: ["example.com"]
+---
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: R2Bucket
+metadata:
+  name: product-images
+  namespace: shop
+spec:
+  accountRef:
+    name: main
+  apiToken:
+    enabled: true
+    permission: read-write
+---
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: DNSRecord
+metadata:
+  name: shop-txt
+  namespace: shop
+spec:
+  accountRef:
+    name: main
+  zone:
+    name: example.com
+  type: TXT
+  name: _verification.example.com
+  content: "shop-verification=abc123"

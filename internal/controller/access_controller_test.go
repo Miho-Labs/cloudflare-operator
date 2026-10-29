@@ -138,7 +138,7 @@ func TestAccessServiceTokenLifecycle(t *testing.T) {
 	if _, err := r.Reconcile(e.ctx, e.req(testNS, "ci")); err != nil {
 		t.Fatal(err)
 	}
-	if e.cf.ServiceTokens[st.Status.TokenID].ExpiresAt.Before(time.Now().Add(24*time.Hour)) {
+	if e.cf.ServiceTokens[st.Status.TokenID].ExpiresAt.Before(time.Now().Add(24 * time.Hour)) {
 		t.Fatal("token should have been refreshed")
 	}
 

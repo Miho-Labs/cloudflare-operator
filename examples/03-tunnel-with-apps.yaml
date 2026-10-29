@@ -1,0 +1,64 @@
+# A tunnel with a managed cloudflared Deployment and two public hostnames ("apps").
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: Tunnel
+metadata:
+  name: edge
+  namespace: default
+spec:
+  accountRef:
+    name: main
+  cloudflared:
+    replicas: 2
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+  originRequest:
+    connectTimeout: 10
+---
+# A plain HTTP service exposed as app.example.com. The operator creates the proxied CNAME
+# app.example.com -> <tunnel-id>.cfargotunnel.com in the matching zone.
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: TunnelIngress
+metadata:
+  name: app
+  namespace: default
+spec:
+  tunnelRef:
+    name: edge
+  hostname: app.example.com
+  service:
+    name: app      # Service in the same namespace
+    port: 8080
+---
+# A path-based rule for the same hostname pointing at a TLS origin with a self-signed cert.
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: TunnelIngress
+metadata:
+  name: app-api
+  namespace: default
+spec:
+  tunnelRef:
+    name: edge
+  hostname: app.example.com
+  path: ^/api/
+  service:
+    url: https://api.default.svc.cluster.local:8443
+  originRequest:
+    noTLSVerify: true
+    httpHostHeader: api.internal
+  dns:
+    enabled: false   # app.example.com already has its CNAME from the rule above
+---
+# Expose SSH to a host through the tunnel (clients connect with `cloudflared access ssh`).
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: TunnelIngress
+metadata:
+  name: bastion-ssh
+  namespace: default
+spec:
+  tunnelRef:
+    name: edge
+  hostname: ssh.example.com
+  service:
+    url: ssh://bastion.default.svc.cluster.local:22
