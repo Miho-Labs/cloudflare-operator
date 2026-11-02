@@ -110,8 +110,10 @@ Cloudflare documents:
 - `AWS_SECRET_ACCESS_KEY` = hex(SHA-256(token value))
 - `AWS_ENDPOINT_URL` = `https://<account>.r2.cloudflarestorage.com`
 
-The token value is only returned at creation, so a lost Secret or a permission change results in a
-new token (old one deleted).
+The token value is only returned at creation, so a lost Secret or a scope change (permission or
+bucket set, tracked by a policy hash annotation on the Secret) results in a new token (old one
+deleted). `R2Bucket.spec.apiToken` and `R2AccessKey` share this logic (`internal/controller/r2token.go`);
+the key variant can span several buckets, including ones the operator does not manage.
 
 ## Multi-tenancy and RBAC
 

@@ -68,11 +68,12 @@ func newEnv(t *testing.T, objs ...client.Object) *env {
 		WithObjects(all...).
 		WithStatusSubresource(
 			&v1alpha1.CloudflareAccount{}, &v1alpha1.DNSRecord{}, &v1alpha1.Tunnel{}, &v1alpha1.TunnelIngress{},
-			&v1alpha1.R2Bucket{}, &v1alpha1.AccessApplication{}, &v1alpha1.AccessGroup{}, &v1alpha1.AccessServiceToken{},
+			&v1alpha1.R2Bucket{}, &v1alpha1.R2AccessKey{}, &v1alpha1.AccessApplication{}, &v1alpha1.AccessGroup{}, &v1alpha1.AccessServiceToken{},
 		).
 		WithIndex(&v1alpha1.DNSRecord{}, IndexAccountRef, AccountRefIndexer).
 		WithIndex(&v1alpha1.Tunnel{}, IndexAccountRef, AccountRefIndexer).
 		WithIndex(&v1alpha1.R2Bucket{}, IndexAccountRef, AccountRefIndexer).
+		WithIndex(&v1alpha1.R2AccessKey{}, IndexAccountRef, AccountRefIndexer).
 		WithIndex(&v1alpha1.AccessApplication{}, IndexAccountRef, AccountRefIndexer).
 		WithIndex(&v1alpha1.AccessGroup{}, IndexAccountRef, AccountRefIndexer).
 		WithIndex(&v1alpha1.AccessServiceToken{}, IndexAccountRef, AccountRefIndexer).

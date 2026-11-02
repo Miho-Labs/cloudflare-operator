@@ -1,0 +1,222 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.23.0
+  name: r2accesskeys.cloudflare.miho-labs.dev
+spec:
+  group: cloudflare.miho-labs.dev
+  names:
+    kind: R2AccessKey
+    listKind: R2AccessKeyList
+    plural: r2accesskeys
+    shortNames:
+    - r2key
+    singular: r2accesskey
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.permission
+      name: Permission
+      type: string
+    - jsonPath: .status.secretName
+      name: Secret
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: R2AccessKey manages an API token with S3 credentials for one
+          or more R2 buckets.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: R2AccessKeySpec defines S3-compatible credentials for one
+              or more R2 buckets.
+            properties:
+              accountRef:
+                description: AccountRef selects the CloudflareAccount whose token
+                  is used.
+                properties:
+                  name:
+                    description: Name of the CloudflareAccount resource.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              buckets:
+                description: Buckets the key can access. Ignored for permission admin.
+                items:
+                  description: R2BucketTarget selects a bucket an R2AccessKey grants
+                    access to. Exactly one of ref or name is set.
+                  properties:
+                    jurisdiction:
+                      description: Jurisdiction of the bucket named by name (default,
+                        eu, fedramp).
+                      enum:
+                      - default
+                      - eu
+                      - fedramp
+                      type: string
+                    name:
+                      description: Name of a bucket that exists on Cloudflare (not
+                        necessarily managed by the operator).
+                      pattern: ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$
+                      type: string
+                    ref:
+                      description: Ref points at an R2Bucket resource in the same
+                        namespace; its bucket name and jurisdiction are used.
+                      properties:
+                        name:
+                          description: Name of the referenced object.
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                  type: object
+                  x-kubernetes-validations:
+                  - message: exactly one of ref or name must be set
+                    rule: has(self.ref) != has(self.name)
+                type: array
+              deletionPolicy:
+                default: Delete
+                description: |-
+                  DeletionPolicy is accepted for consistency; the API token is always deleted with the object
+                  because its secret cannot be recovered.
+                enum:
+                - Delete
+                - Retain
+                type: string
+              permission:
+                default: read-write
+                description: Permission granted on the listed buckets. admin grants
+                  access to every bucket in the account.
+                enum:
+                - read-only
+                - read-write
+                - admin
+                type: string
+              secretName:
+                description: SecretName of the generated Secret. Defaults to "<name>-r2-credentials".
+                type: string
+              tokenName:
+                description: TokenName on Cloudflare. Defaults to "k8s-<namespace>-<name>".
+                type: string
+            required:
+            - accountRef
+            type: object
+            x-kubernetes-validations:
+            - message: buckets is required unless permission is admin
+              rule: self.permission == 'admin' || size(self.buckets) > 0
+          status:
+            description: R2AccessKeyStatus is the observed state of an R2AccessKey.
+            properties:
+              buckets:
+                description: Buckets the current token is scoped to.
+                items:
+                  type: string
+                type: array
+              conditions:
+                description: Conditions describe the current state of the resource.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              endpoint:
+                description: Endpoint is the S3-compatible endpoint for the account.
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the metadata.generation the status
+                  reflects.
+                format: int64
+                type: integer
+              secretName:
+                description: SecretName holding the credentials.
+                type: string
+              tokenID:
+                description: TokenID of the API token (also the S3 access key ID).
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

@@ -36,3 +36,18 @@ spec:
           envFrom:
             - secretRef:
                 name: uploads-r2   # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_ENDPOINT_URL, AWS_REGION, BUCKET_NAME
+---
+# Separate, read-only credentials for the same bucket, for another workload (or namespace).
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: R2AccessKey
+metadata:
+  name: uploads-reader
+  namespace: default
+spec:
+  accountRef:
+    name: main
+  permission: read-only
+  buckets:
+    - ref:
+        name: uploads             # R2Bucket above
+    - name: archive-2024          # any other bucket in the account, by name

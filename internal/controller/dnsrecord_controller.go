@@ -195,6 +195,8 @@ func AccountRefIndexer(obj client.Object) []string {
 		return []string{o.Spec.AccountRef.Name}
 	case *v1alpha1.R2Bucket:
 		return []string{o.Spec.AccountRef.Name}
+	case *v1alpha1.R2AccessKey:
+		return []string{o.Spec.AccountRef.Name}
 	case *v1alpha1.AccessApplication:
 		return []string{o.Spec.AccountRef.Name}
 	case *v1alpha1.AccessGroup:

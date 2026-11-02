@@ -104,6 +104,7 @@ func main() {
 		&controller.TunnelReconciler{Client: mgr.GetClient(), Recorder: rec, Clients: clients, ResyncPeriod: resyncPeriod, CloudflaredImage: cloudflaredImage},
 		&controller.TunnelIngressReconciler{Client: mgr.GetClient(), Recorder: rec, Clients: clients, ResyncPeriod: resyncPeriod},
 		&controller.R2BucketReconciler{Client: mgr.GetClient(), Recorder: rec, Clients: clients, ResyncPeriod: resyncPeriod},
+		&controller.R2AccessKeyReconciler{Client: mgr.GetClient(), Recorder: rec, Clients: clients, ResyncPeriod: resyncPeriod},
 		&controller.AccessGroupReconciler{Client: mgr.GetClient(), Recorder: rec, Clients: clients, ResyncPeriod: resyncPeriod},
 		&controller.AccessServiceTokenReconciler{Client: mgr.GetClient(), Recorder: rec, Clients: clients, ResyncPeriod: resyncPeriod},
 		&controller.AccessApplicationReconciler{Client: mgr.GetClient(), Recorder: rec, Clients: clients, ResyncPeriod: resyncPeriod},
@@ -137,7 +138,7 @@ func registerIndexes(mgr ctrl.Manager) error {
 	ctx := context.Background()
 	indexer := mgr.GetFieldIndexer()
 	for _, obj := range []client.Object{
-		&v1alpha1.DNSRecord{}, &v1alpha1.Tunnel{}, &v1alpha1.R2Bucket{},
+		&v1alpha1.DNSRecord{}, &v1alpha1.Tunnel{}, &v1alpha1.R2Bucket{}, &v1alpha1.R2AccessKey{},
 		&v1alpha1.AccessApplication{}, &v1alpha1.AccessGroup{}, &v1alpha1.AccessServiceToken{},
 	} {
 		if err := indexer.IndexField(ctx, obj, controller.IndexAccountRef, controller.AccountRefIndexer); err != nil {
