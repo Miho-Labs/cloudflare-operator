@@ -2,6 +2,7 @@ package cloudflare_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/miho-labs/cloudflare-operator/internal/cloudflare"
@@ -80,6 +81,57 @@ func TestZonesAndDNS(t *testing.T) {
 	}
 	if err := c.DeleteDNSRecord(ctx, zoneID, rec.ID); err != nil {
 		t.Fatalf("second delete should be a no-op: %v", err)
+	}
+}
+
+func TestZoneLookupErrors(t *testing.T) {
+	c, srv := newClient(t)
+	ctx := context.Background()
+	srv.Zones["other"] = fake.Zone{ID: "other", Name: "other.com", AccountID: "ffffffffffffffffffffffffffffffff"}
+	_, err := c.ZoneByName(ctx, "other.com")
+	if !cloudflare.IsZoneNotFound(err) || !strings.Contains(err.Error(), "belongs to account ffffffffffffffffffffffffffffffff") {
+		t.Fatalf("expected foreign-account error, got %v", err)
+	}
+	_, err = c.ZoneByName(ctx, "missing.com")
+	if !cloudflare.IsZoneNotFound(err) || !strings.Contains(err.Error(), "Zone:Read") {
+		t.Fatalf("expected not-visible error, got %v", err)
+	}
+	_, err = c.ZoneForHostname(ctx, "a.missing.com")
+	if !cloudflare.IsZoneNotFound(err) {
+		t.Fatalf("expected zone-not-found for hostname, got %v", err)
+	}
+	srv.Fail["GET /zones"] = 403
+	_, err = c.ZoneForHostname(ctx, "a.missing.com")
+	if cloudflare.IsZoneNotFound(err) || !cloudflare.IsAuthError(err) {
+		t.Fatalf("API errors must not be masked as not-found: %v", err)
+	}
+}
+
+func TestFindDNSRecordAcrossProxiableTypes(t *testing.T) {
+	c, srv := newClient(t)
+	ctx := context.Background()
+	zoneID := srv.AddZone("example.com")
+	srv.DNSRecords["a"] = fake.DNSRecord{ID: "a", ZoneID: zoneID, Type: "A", Name: "app.example.com", Content: "192.0.2.1", TTL: 300}
+	srv.DNSRecords["txt"] = fake.DNSRecord{ID: "txt", ZoneID: zoneID, Type: "TXT", Name: "app.example.com", Content: "v=spf1"}
+
+	// A CNAME at a name that already has an A record finds the A record for conversion.
+	found, err := c.FindDNSRecord(ctx, zoneID, "CNAME", "app.example.com")
+	if err != nil || found == nil || found.ID != "a" {
+		t.Fatalf("expected the A record, got %+v %v", found, err)
+	}
+	// Non-proxiable types only match their own type.
+	found, err = c.FindDNSRecord(ctx, zoneID, "MX", "app.example.com")
+	if err != nil || found != nil {
+		t.Fatalf("expected nothing for MX, got %+v %v", found, err)
+	}
+	found, err = c.FindDNSRecord(ctx, zoneID, "TXT", "app.example.com")
+	if err != nil || found == nil || found.ID != "txt" {
+		t.Fatalf("expected the TXT record, got %+v %v", found, err)
+	}
+	// Converting the A record into a proxied CNAME works in place.
+	updated, err := c.UpdateDNSRecord(ctx, cloudflare.DNSRecord{ID: "a", ZoneID: zoneID, Type: "CNAME", Name: "app.example.com", Content: "x.cfargotunnel.com", Proxied: true, TTL: 1})
+	if err != nil || updated.Type != "CNAME" || !updated.Proxied {
+		t.Fatalf("convert: %+v %v", updated, err)
 	}
 }
 

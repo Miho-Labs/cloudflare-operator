@@ -47,6 +47,8 @@ type Server struct {
 type Zone struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+	// AccountID owning the zone; empty means the fake's own account.
+	AccountID string `json:"-"`
 }
 
 // DNSRecord is a fake DNS record.
@@ -310,7 +312,14 @@ func (s *Server) listZones(w http.ResponseWriter, r *http.Request) {
 	out := []map[string]any{}
 	for _, z := range s.Zones {
 		if name == "" || strings.EqualFold(z.Name, name) {
-			out = append(out, map[string]any{"id": z.ID, "name": z.Name, "account": map[string]any{"id": s.AccountID}})
+			acct := z.AccountID
+			if acct == "" {
+				acct = s.AccountID
+			}
+			if q := r.URL.Query().Get("account.id"); q != "" && q != acct {
+				continue
+			}
+			out = append(out, map[string]any{"id": z.ID, "name": z.Name, "account": map[string]any{"id": acct}})
 		}
 	}
 	writeList(w, out, len(out))
@@ -368,7 +377,7 @@ func (s *Server) createDNS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, existing := range s.DNSRecords {
-		if existing.ZoneID == zone && strings.EqualFold(existing.Name, rec.Name) && existing.Type == rec.Type && existing.Type == "CNAME" {
+		if existing.ZoneID == zone && strings.EqualFold(existing.Name, rec.Name) && proxiable(existing.Type) && proxiable(rec.Type) {
 			writeError(w, 400, 81053, "An A, AAAA, or CNAME record with that host already exists.")
 			return
 		}
@@ -426,6 +435,14 @@ func (s *Server) deleteDNS(w http.ResponseWriter, r *http.Request) {
 	}
 	delete(s.DNSRecords, id)
 	writeJSON(w, 200, map[string]any{"id": id})
+}
+
+func proxiable(t string) bool {
+	switch strings.ToUpper(t) {
+	case "A", "AAAA", "CNAME":
+		return true
+	}
+	return false
 }
 
 // --- tunnels ---------------------------------------------------------------

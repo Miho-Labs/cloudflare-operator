@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"strings"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -111,6 +112,45 @@ func TestDNSRecordAdoptsExisting(t *testing.T) {
 	}
 	if len(e.cf.DNSRecords) != 1 {
 		t.Fatal("duplicate record created")
+	}
+}
+
+func TestDNSRecordConvertsConflictingType(t *testing.T) {
+	rec := dnsRecord("app")
+	rec.Spec.Type = "CNAME"
+	rec.Spec.Name = "app.example.com"
+	rec.Spec.Content = "tunnel.cfargotunnel.com"
+	rec.Spec.Proxied = true
+	e := newEnv(t, rec)
+	zoneID := e.cf.AddZone("example.com")
+	e.cf.DNSRecords["old-a"] = fake.DNSRecord{ID: "old-a", ZoneID: zoneID, Type: "A", Name: "app.example.com", Content: "192.0.2.1", TTL: 300}
+	r := &DNSRecordReconciler{Client: e.k8s, Recorder: e.recorder, Clients: e.clients}
+	if _, err := r.Reconcile(e.ctx, e.req(testNS, "app")); err != nil {
+		t.Fatal(err)
+	}
+	e.get(rec)
+	assertReady(t, rec.Status.Conditions, true)
+	if rec.Status.RecordID != "old-a" {
+		t.Fatalf("expected the A record to be adopted, got %+v", rec.Status)
+	}
+	got := e.cf.DNSRecords["old-a"]
+	if got.Type != "CNAME" || got.Content != "tunnel.cfargotunnel.com" || !got.Proxied || len(e.cf.DNSRecords) != 1 {
+		t.Fatalf("record not converted in place: %+v (%d records)", got, len(e.cf.DNSRecords))
+	}
+}
+
+func TestDNSRecordZoneInOtherAccount(t *testing.T) {
+	rec := dnsRecord("www")
+	e := newEnv(t, rec)
+	e.cf.Zones["foreign"] = fake.Zone{ID: "foreign", Name: "example.com", AccountID: "ffffffffffffffffffffffffffffffff"}
+	r := &DNSRecordReconciler{Client: e.k8s, Recorder: e.recorder, Clients: e.clients}
+	if _, err := r.Reconcile(e.ctx, e.req(testNS, "www")); err == nil {
+		t.Fatal("expected error")
+	}
+	e.get(rec)
+	c := readyCondition(rec.Status.Conditions)
+	if c.Status != metav1.ConditionFalse || !strings.Contains(c.Message, "belongs to account ffffffffffffffffffffffffffffffff") {
+		t.Fatalf("condition: %+v", c)
 	}
 }
 

@@ -119,7 +119,11 @@ func (r *DNSRecordReconciler) reconcile(ctx context.Context, rec *v1alpha1.DNSRe
 			return err
 		}
 		if current != nil {
-			r.Recorder.Eventf(rec, corev1.EventTypeNormal, EventAdopted, "adopted existing %s record %s (%s)", current.Type, current.Name, current.ID)
+			if !strings.EqualFold(current.Type, desired.Type) {
+				r.Recorder.Eventf(rec, corev1.EventTypeNormal, EventAdopted, "adopted existing %s record %s (%s); converting it to %s", current.Type, current.Name, current.ID, desired.Type)
+			} else {
+				r.Recorder.Eventf(rec, corev1.EventTypeNormal, EventAdopted, "adopted existing %s record %s (%s)", current.Type, current.Name, current.ID)
+			}
 		}
 	}
 

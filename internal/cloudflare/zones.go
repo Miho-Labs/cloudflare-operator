@@ -2,6 +2,7 @@ package cloudflare
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -32,21 +33,39 @@ func (c *Client) ZoneByName(ctx context.Context, name string) (*ZoneInfo, error)
 			return &info, nil
 		}
 	}
-	page, err := c.api.Zones.List(ctx, zones.ZoneListParams{
-		Name:    cf.F(name),
-		Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(c.AccountID)}),
-	})
+	// The list is filtered by name only; the account is checked on the result so a zone that lives
+	// in another account produces a precise error instead of "not found".
+	page, err := c.api.Zones.List(ctx, zones.ZoneListParams{Name: cf.F(name)})
 	if err != nil {
 		return nil, fmt.Errorf("list zones: %w", err)
 	}
 	for _, z := range page.Result {
-		if strings.EqualFold(z.Name, name) {
-			info := ZoneInfo{ID: z.ID, Name: z.Name}
-			c.zoneCache.Store(name, zoneCacheEntry{info: info, expires: time.Now().Add(zoneCacheTTL)})
-			return &info, nil
+		if !strings.EqualFold(z.Name, name) {
+			continue
 		}
+		if z.Account.ID != "" && !strings.EqualFold(z.Account.ID, c.AccountID) {
+			return nil, &ZoneNotFoundError{Zone: name, AccountID: c.AccountID, Message: fmt.Sprintf("zone %q belongs to account %s, not %s", name, z.Account.ID, c.AccountID)}
+		}
+		info := ZoneInfo{ID: z.ID, Name: z.Name}
+		c.zoneCache.Store(name, zoneCacheEntry{info: info, expires: time.Now().Add(zoneCacheTTL)})
+		return &info, nil
 	}
-	return nil, fmt.Errorf("zone %q not found in account %s", name, c.AccountID)
+	return nil, &ZoneNotFoundError{Zone: name, AccountID: c.AccountID, Message: fmt.Sprintf("zone %q not visible to the token in account %s (does the zone exist and does the token have Zone:Read on it?)", name, c.AccountID)}
+}
+
+// ZoneNotFoundError is returned when a zone name cannot be resolved.
+type ZoneNotFoundError struct {
+	Zone      string
+	AccountID string
+	Message   string
+}
+
+func (e *ZoneNotFoundError) Error() string { return e.Message }
+
+// IsZoneNotFound reports whether err is a zone resolution failure (as opposed to an API error).
+func IsZoneNotFound(err error) bool {
+	var z *ZoneNotFoundError
+	return errors.As(err, &z)
 }
 
 // ZoneByID fetches a zone by ID.
@@ -65,9 +84,9 @@ func (c *Client) ZoneForHostname(ctx context.Context, hostname string) (*ZoneInf
 		candidate := strings.Join(labels[i:], ".")
 		if z, err := c.ZoneByName(ctx, candidate); err == nil {
 			return z, nil
-		} else if StatusCode(err) != 0 {
+		} else if !IsZoneNotFound(err) {
 			return nil, err
 		}
 	}
-	return nil, fmt.Errorf("no zone in account %s matches hostname %q", c.AccountID, hostname)
+	return nil, &ZoneNotFoundError{Zone: hostname, AccountID: c.AccountID, Message: fmt.Sprintf("no zone visible to the token in account %s matches hostname %q (does the token have Zone:Read on the zone?)", c.AccountID, hostname)}
 }
