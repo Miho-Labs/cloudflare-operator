@@ -127,7 +127,7 @@ func (r *TunnelIngressReconciler) ensureDNSRecord(ctx context.Context, ti *v1alp
 			TTL:            1,
 			Proxied:        true,
 			Comment:        ti.Spec.DNS.Comment,
-			DeletionPolicy: ti.Spec.DNS.DeletionPolicy,
+			DeletionPolicy: deletionPolicy(ti.Spec.DNS.DeletionPolicy),
 		}
 		if rec.Spec.Comment == "" {
 			rec.Spec.Comment = fmt.Sprintf("managed by cloudflare-operator (TunnelIngress %s/%s)", ti.Namespace, ti.Name)

@@ -42,6 +42,7 @@ rules:
   - accessgroups
   - accessservicetokens
   - dnsrecords
+  - r2accesskeys
   - r2buckets
   - tunnelingresses
   - tunnels
@@ -60,6 +61,7 @@ rules:
   - accessgroups/finalizers
   - accessservicetokens/finalizers
   - dnsrecords/finalizers
+  - r2accesskeys/finalizers
   - r2buckets/finalizers
   - tunnels/finalizers
   verbs:
@@ -72,6 +74,7 @@ rules:
   - accessservicetokens/status
   - cloudflareaccounts/status
   - dnsrecords/status
+  - r2accesskeys/status
   - r2buckets/status
   - tunnelingresses/status
   - tunnels/status

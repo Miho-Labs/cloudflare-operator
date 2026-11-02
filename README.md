@@ -10,6 +10,7 @@ token and account ID per `CloudflareAccount`.
 | `TunnelIngress` | A public hostname ("app") served through a Tunnel, including its proxied CNAME record. |
 | `DNSRecord` | Any DNS record in a zone. Works on its own or alongside tunnels. |
 | `R2Bucket` | An R2 bucket plus an optional bucket-scoped API token, delivered as S3 credentials in a Secret. |
+| `R2AccessKey` | S3 credentials for one or more buckets (by reference or name) with a chosen permission level, independent of bucket ownership. |
 | `AccessApplication` | A Zero Trust Access self-hosted application with inline policies. |
 | `AccessGroup` | A reusable Access group referenced by policies. |
 | `AccessServiceToken` | An Access service token for machine clients, stored in a Secret and refreshed before expiry. |
@@ -95,6 +96,7 @@ rule to the tunnel configuration and creates the proxied CNAME `app.example.com`
 - Resource reference: [CloudflareAccount](docs/resources/cloudflareaccount.md),
   [Tunnel](docs/resources/tunnel.md), [TunnelIngress](docs/resources/tunnelingress.md),
   [DNSRecord](docs/resources/dnsrecord.md), [R2Bucket](docs/resources/r2bucket.md),
+  [R2AccessKey](docs/resources/r2accesskey.md),
   [AccessApplication](docs/resources/accessapplication.md), [AccessGroup](docs/resources/accessgroup.md),
   [AccessServiceToken](docs/resources/accessservicetoken.md).
 - [Troubleshooting](docs/troubleshooting.md)

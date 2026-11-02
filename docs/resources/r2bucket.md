@@ -39,6 +39,9 @@ spec:
 | `apiToken.tokenName` | string | `k8s-<namespace>-<name>` | Token name shown in the dashboard. |
 | `deletionPolicy` | `Delete`, `Retain` | `Delete` | Delete the bucket with the object. The token is always deleted. |
 
+For credentials that cover several buckets, a different permission level per consumer, or buckets
+the operator does not manage, use [R2AccessKey](r2accesskey.md) instead of `apiToken`.
+
 ## Credentials Secret
 
 | Key | Value |

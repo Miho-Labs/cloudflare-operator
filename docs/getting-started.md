@@ -35,7 +35,7 @@ The operator authenticates with a scoped **API token**, never the Global API Key
 | Account | Access: Apps and Policies | Edit | `AccessApplication`, `AccessGroup` |
 | Account | Access: Service Tokens | Edit | `AccessServiceToken` |
 | Account | Workers R2 Storage | Edit | `R2Bucket` |
-| Account | Account API Tokens | Edit | `R2Bucket` with `apiToken.enabled` (creates bucket-scoped tokens) |
+| Account | Account API Tokens | Edit | `R2Bucket` with `apiToken.enabled`, `R2AccessKey` (create bucket-scoped tokens) |
 | Zone | Zone | Read | `DNSRecord`, `TunnelIngress` (zone lookup) |
 | Zone | DNS | Edit | `DNSRecord`, `TunnelIngress` |
 

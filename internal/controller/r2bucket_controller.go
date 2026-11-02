@@ -6,8 +6,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -134,101 +132,32 @@ func (r *R2BucketReconciler) reconcile(ctx context.Context, bucket *v1alpha1.R2B
 }
 
 func (r *R2BucketReconciler) ensureToken(ctx context.Context, cl *cloudflare.Client, bucket *v1alpha1.R2Bucket) error {
-	secretName := CredentialsSecretName(bucket)
-	secret := &corev1.Secret{}
-	err := r.Get(ctx, types.NamespacedName{Namespace: bucket.Namespace, Name: secretName}, secret)
-	if err != nil && !apierrors.IsNotFound(err) {
-		return err
+	req := r2TokenRequest{
+		owner:      bucket,
+		secretName: CredentialsSecretName(bucket),
+		tokenName:  tokenName(bucket),
+		permission: bucket.Spec.APIToken.Permission,
+		buckets:    []string{bucketTarget(bucketName(bucket), jurisdiction(bucket))},
+		extraData: map[string]string{
+			"AWS_ENDPOINT_URL": bucket.Status.Endpoint,
+			"BUCKET_NAME":      bucket.Status.BucketName,
+		},
 	}
-	secretOK := err == nil && len(secret.Data["AWS_SECRET_ACCESS_KEY"]) > 0 && string(secret.Data["AWS_ACCESS_KEY_ID"]) == bucket.Status.TokenID
-
-	if bucket.Status.TokenID != "" {
-		exists, err := cl.AccountTokenExists(ctx, bucket.Status.TokenID)
-		if err != nil {
-			return err
-		}
-		if exists && secretOK && secret.Annotations[annotationPermission] == string(bucket.Spec.APIToken.Permission) {
-			bucket.Status.CredentialsSecretName = secretName
-			return nil
-		}
-		// The token value cannot be read back, so any mismatch means a new token.
-		if exists {
-			if err := cl.DeleteAccountToken(ctx, bucket.Status.TokenID); err != nil {
-				return err
-			}
-		}
-		bucket.Status.TokenID = ""
-	}
-
-	policies, err := r.tokenPolicies(ctx, cl, bucket)
+	id, err := ensureR2Token(ctx, r.Client, r.Recorder, cl, req, bucket.Status.TokenID)
 	if err != nil {
 		return err
 	}
-	created, err := cl.CreateAccountToken(ctx, tokenName(bucket), policies)
-	if err != nil {
-		return err
-	}
-	r.Recorder.Eventf(bucket, corev1.EventTypeNormal, EventCreated, "created API token %s (%s)", tokenName(bucket), created.ID)
-
-	secret = &corev1.Secret{}
-	secret.Name, secret.Namespace = secretName, bucket.Namespace
-	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {
-		secret.Labels = managedLabels(nil)
-		if secret.Annotations == nil {
-			secret.Annotations = map[string]string{}
-		}
-		secret.Annotations[annotationPermission] = string(bucket.Spec.APIToken.Permission)
-		secret.Type = corev1.SecretTypeOpaque
-		secret.Data = map[string][]byte{
-			"AWS_ACCESS_KEY_ID":     []byte(created.ID),
-			"AWS_SECRET_ACCESS_KEY": []byte(cloudflare.R2SecretAccessKey(created.Value)),
-			"AWS_ENDPOINT_URL":      []byte(bucket.Status.Endpoint),
-			"AWS_REGION":            []byte("auto"),
-			"BUCKET_NAME":           []byte(bucket.Status.BucketName),
-			"R2_ACCOUNT_ID":         []byte(cl.AccountID),
-			"R2_TOKEN_ID":           []byte(created.ID),
-		}
-		return controllerutil.SetControllerReference(bucket, secret, r.Scheme())
-	})
-	if err != nil {
-		// Do not leak a token nobody can use.
-		_ = cl.DeleteAccountToken(ctx, created.ID)
-		return fmt.Errorf("write credentials secret: %w", err)
-	}
-	bucket.Status.TokenID = created.ID
-	bucket.Status.CredentialsSecretName = secretName
+	bucket.Status.TokenID = id
+	bucket.Status.CredentialsSecretName = req.secretName
 	return nil
 }
 
-const annotationPermission = v1alpha1.Group + "/permission"
-
-func (r *R2BucketReconciler) tokenPolicies(ctx context.Context, cl *cloudflare.Client, bucket *v1alpha1.R2Bucket) ([]cloudflare.TokenPolicy, error) {
-	perm := bucket.Spec.APIToken.Permission
-	if perm == "" {
-		perm = v1alpha1.R2PermissionReadWrite
+// bucketTarget encodes a bucket and its jurisdiction for r2TokenRequest.buckets.
+func bucketTarget(name, jurisdiction string) string {
+	if jurisdiction == "" || jurisdiction == "default" {
+		return name
 	}
-	var groups []string
-	resources := map[string]string{cl.R2BucketResource(bucketName(bucket), jurisdiction(bucket)): "*"}
-	switch perm {
-	case v1alpha1.R2PermissionReadOnly:
-		groups = []string{cloudflare.PermR2BucketItemRead}
-	case v1alpha1.R2PermissionReadWrite:
-		groups = []string{cloudflare.PermR2BucketItemRead, cloudflare.PermR2BucketItemWrite}
-	case v1alpha1.R2PermissionAdmin:
-		groups = []string{cloudflare.PermR2StorageWrite}
-		resources = map[string]string{cl.AccountResource(): "*"}
-	default:
-		return nil, notReady(v1alpha1.ReasonInvalidSpec, fmt.Sprintf("unknown apiToken.permission %q", perm), 0)
-	}
-	ids, err := cl.PermissionGroupIDs(ctx, groups...)
-	if err != nil {
-		return nil, err
-	}
-	groupIDs := make([]string, 0, len(groups))
-	for _, g := range groups {
-		groupIDs = append(groupIDs, ids[g])
-	}
-	return []cloudflare.TokenPolicy{{PermissionGroupIDs: groupIDs, Resources: resources}}, nil
+	return name + "@" + jurisdiction
 }
 
 func (r *R2BucketReconciler) finalize(ctx context.Context, bucket *v1alpha1.R2Bucket) (ctrl.Result, error) {

@@ -41,6 +41,16 @@ func (r DNSRecord) Equal(o DNSRecord) bool {
 	return stringSetEqual(r.Tags, o.Tags)
 }
 
+// Proxiable reports whether a record type can be proxied through Cloudflare. These three types are
+// also mutually exclusive at a given name.
+func Proxiable(recordType string) bool {
+	switch strings.ToUpper(recordType) {
+	case "A", "AAAA", "CNAME":
+		return true
+	}
+	return false
+}
+
 func contentEqual(recordType, a, b string) bool {
 	switch strings.ToUpper(recordType) {
 	case "CNAME", "MX", "NS", "PTR", "SRV":
@@ -97,8 +107,12 @@ func toRecordBody(r DNSRecord) dns.RecordNewParamsBody {
 		Type:    cf.F(dns.RecordNewParamsBodyType(strings.ToUpper(r.Type))),
 		Content: cf.F(r.Content),
 		TTL:     cf.F(dns.TTL(r.TTL)),
-		Proxied: cf.F(r.Proxied),
-		Comment: cf.F(r.Comment),
+	}
+	if Proxiable(r.Type) {
+		body.Proxied = cf.F(r.Proxied)
+	}
+	if r.Comment != "" {
+		body.Comment = cf.F(r.Comment)
 	}
 	if r.Priority != nil {
 		body.Priority = cf.F(float64(*r.Priority))
@@ -115,9 +129,12 @@ func toRecordUpdateBody(r DNSRecord) dns.RecordUpdateParamsBody {
 		Type:    cf.F(dns.RecordUpdateParamsBodyType(strings.ToUpper(r.Type))),
 		Content: cf.F(r.Content),
 		TTL:     cf.F(dns.TTL(r.TTL)),
-		Proxied: cf.F(r.Proxied),
-		Comment: cf.F(r.Comment),
 	}
+	if Proxiable(r.Type) {
+		body.Proxied = cf.F(r.Proxied)
+	}
+	// PUT replaces the record, so an empty comment is sent to clear a previous one.
+	body.Comment = cf.F(r.Comment)
 	if r.Priority != nil {
 		body.Priority = cf.F(float64(*r.Priority))
 	}
@@ -138,22 +155,37 @@ func (c *Client) GetDNSRecord(ctx context.Context, zoneID, id string) (*DNSRecor
 }
 
 // FindDNSRecord looks a record up by type and exact name. Returns nil when none exists.
+// For A, AAAA and CNAME, which cannot coexist at one name, a record of one of the other two types
+// at that name is returned instead so the caller can adopt and convert it rather than hit
+// Cloudflare's "record with that host already exists" error.
 func (c *Client) FindDNSRecord(ctx context.Context, zoneID, recordType, name string) (*DNSRecord, error) {
-	page, err := c.api.DNS.Records.List(ctx, dns.RecordListParams{
-		ZoneID: cf.F(zoneID),
-		Name:   cf.F(dns.RecordListParamsName{Exact: cf.F(name)}),
-		Type:   cf.F(dns.RecordListParamsType(strings.ToUpper(recordType))),
-	})
+	recordType = strings.ToUpper(recordType)
+	params := dns.RecordListParams{
+		ZoneID:  cf.F(zoneID),
+		Name:    cf.F(dns.RecordListParamsName{Exact: cf.F(name)}),
+		PerPage: cf.F(100.0),
+	}
+	if !Proxiable(recordType) {
+		params.Type = cf.F(dns.RecordListParamsType(recordType))
+	}
+	page, err := c.api.DNS.Records.List(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("list dns records: %w", err)
 	}
+	var sibling *DNSRecord
 	for _, r := range page.Result {
-		if strings.EqualFold(r.Name, name) && strings.EqualFold(string(r.Type), recordType) {
-			rec := fromRecordResponse(zoneID, r)
+		if !strings.EqualFold(r.Name, name) {
+			continue
+		}
+		rec := fromRecordResponse(zoneID, r)
+		if strings.EqualFold(rec.Type, recordType) {
 			return &rec, nil
 		}
+		if Proxiable(recordType) && Proxiable(rec.Type) && sibling == nil {
+			sibling = &rec
+		}
 	}
-	return nil, nil
+	return sibling, nil
 }
 
 // CreateDNSRecord creates a record.

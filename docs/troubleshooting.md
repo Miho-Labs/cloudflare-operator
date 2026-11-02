@@ -13,7 +13,9 @@ kubectl -n cloudflare-operator logs deploy/cloudflare-operator
 | `CloudflareAccount` `Ready=False`, message mentions `Authentication error` or `403` | Token invalid, expired, or missing *Account Settings: Read* / wrong account ID | Re-check the token at `/user/tokens/verify`, confirm `spec.accountID` matches the dashboard. |
 | Resource stuck in `AccountNotReady` | The referenced account is not verified | Fix the account first; dependents retry every 30 s. |
 | `AccountNotFound` | `spec.accountRef.name` does not match a `CloudflareAccount` | `kubectl get cloudflareaccounts`. |
-| `DNSRecord` error `zone "x" not found in account` | Zone not in this account or token lacks *Zone: Read* | Check the zone, extend the token's zone resources. |
+| `DNSRecord` message `zone "x" not visible to the token in account` | Token lacks *Zone: Read* on that zone (zone resources too narrow), or the zone does not exist | Edit the token: Zone → Zone → Read, with the zone included in Zone Resources. |
+| `DNSRecord` message `zone "x" belongs to account Y, not Z` | The zone lives in a different Cloudflare account than `spec.accountID` | Point `accountRef` at a `CloudflareAccount` for account Y, or move the zone. |
+| Event `adopted existing A record ...; converting it to CNAME` | The hostname already had an A/AAAA/CNAME record (they cannot coexist); the operator took it over | Expected when migrating a host to a tunnel. Set `deletionPolicy: Retain` if you want the record kept on delete. |
 | `TunnelIngress` stays `DependencyNotReady: waiting for Tunnel to push hostname` | Tunnel not ready, or the TunnelIngress is in another namespace | Tunnels and ingresses must share a namespace; check the Tunnel's conditions. |
 | `Tunnel` error `exists but is locally managed` | A tunnel with that name was created with a local `config.yml` | Rename the Tunnel (`spec.name`) or delete/migrate the old tunnel. |
 | cloudflared pods crash-loop with `Unauthorized` | Token Secret stale after the tunnel was recreated | The operator rewrites the Secret on the next reconcile; delete the pods. |
