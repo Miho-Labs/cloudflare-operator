@@ -1,0 +1,102 @@
+# Zone security: rate limiting, a custom WAF rule, the OWASP managed ruleset and IP access rules.
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: RateLimitRule
+metadata:
+  name: login-throttle
+  namespace: default
+spec:
+  accountRef:
+    name: main
+  zone:
+    name: example.com
+  description: login throttle
+  expression: '(http.request.uri.path eq "/api/login" and http.request.method eq "POST")'
+  action: block
+  blockResponse:
+    statusCode: 429
+    contentType: application/json
+    body: '{"error":"too many requests"}'
+  rateLimit:
+    characteristics: ["ip.src", "cf.colo.id"]
+    period: 10                 # 10 s is the only period on Free/Pro plans
+    requestsPerPeriod: 5
+    mitigationTimeout: 60
+---
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: WAFRule
+metadata:
+  name: admin-geo-fence
+  namespace: default
+spec:
+  accountRef:
+    name: main
+  zone:
+    name: example.com
+  description: admin only from PL
+  expression: '(http.request.uri.path contains "/admin" and not ip.geoip.country eq "PL")'
+  action: managed_challenge
+  position:
+    index: 1
+---
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: WAFRule
+metadata:
+  name: allow-uptime-checks
+  namespace: default
+spec:
+  accountRef:
+    name: main
+  zone:
+    name: example.com
+  description: skip security for uptime checks
+  expression: '(http.user_agent contains "UptimeRobot" and ip.src in {198.51.100.0/24})'
+  action: skip
+  skip:
+    ruleset: current
+    products: ["rateLimit", "waf"]
+---
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: ManagedWAFRule
+metadata:
+  name: owasp
+  namespace: default
+spec:
+  accountRef:
+    name: main
+  zone:
+    name: example.com
+  description: OWASP core ruleset
+  ruleset: owasp-core          # needs a Pro plan or higher
+  overrides:
+    action: managed_challenge
+    scoreThreshold: 40
+    paranoiaLevel: 2
+---
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: IPAccessRule
+metadata:
+  name: block-scanner
+  namespace: default
+spec:
+  accountRef:
+    name: main
+  zone:
+    name: example.com
+  mode: block
+  target: ip
+  value: 198.51.100.7
+  notes: abusive scanner
+---
+apiVersion: cloudflare.miho-labs.dev/v1alpha1
+kind: IPAccessRule
+metadata:
+  name: office-allowlist
+  namespace: default
+spec:
+  accountRef:
+    name: main
+  scope: account               # applies to every zone in the account
+  mode: whitelist
+  target: ip_range
+  value: 203.0.113.0/24
+  notes: office egress

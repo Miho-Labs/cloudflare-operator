@@ -35,7 +35,9 @@ type Server struct {
 	AccessApps     map[string]map[string]any
 	AccessGroups   map[string]map[string]any
 	ServiceTokens  map[string]ServiceToken
-	NonEmptyBucket map[string]bool // buckets that refuse deletion
+	Rulesets       map[string]Ruleset    // id -> ruleset (zone entrypoints and managed)
+	AccessRules    map[string]AccessRule // id -> IP access rule
+	NonEmptyBucket map[string]bool       // buckets that refuse deletion
 
 	// Calls records "METHOD /path" for every request, in order.
 	Calls []string
@@ -134,9 +136,12 @@ func New() *Server {
 		AccessApps:     map[string]map[string]any{},
 		AccessGroups:   map[string]map[string]any{},
 		ServiceTokens:  map[string]ServiceToken{},
+		Rulesets:       map[string]Ruleset{},
+		AccessRules:    map[string]AccessRule{},
 		NonEmptyBucket: map[string]bool{},
 		Fail:           map[string]int{},
 	}
+	s.seedManagedRulesets()
 	s.Server = httptest.NewServer(s.routes())
 	return s
 }
@@ -263,6 +268,8 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET "+a+"/access/groups/{id}", s.getAccessGroup)
 	mux.HandleFunc("PUT "+a+"/access/groups/{id}", s.updateAccessGroup)
 	mux.HandleFunc("DELETE "+a+"/access/groups/{id}", s.deleteAccessGroup)
+
+	s.rulesetRoutes(mux)
 
 	mux.HandleFunc("GET "+a+"/access/service_tokens", s.listServiceTokens)
 	mux.HandleFunc("POST "+a+"/access/service_tokens", s.createServiceToken)

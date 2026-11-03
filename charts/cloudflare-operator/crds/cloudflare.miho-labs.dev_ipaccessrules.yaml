@@ -1,0 +1,217 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.23.0
+  name: ipaccessrules.cloudflare.miho-labs.dev
+spec:
+  group: cloudflare.miho-labs.dev
+  names:
+    kind: IPAccessRule
+    listKind: IPAccessRuleList
+    plural: ipaccessrules
+    shortNames:
+    - cfipaccess
+    singular: ipaccessrule
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.scope
+      name: Scope
+      type: string
+    - jsonPath: .spec.mode
+      name: Mode
+      type: string
+    - jsonPath: .spec.target
+      name: Target
+      type: string
+    - jsonPath: .spec.value
+      name: Value
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: IPAccessRule manages one IP Access Rule at zone or account level.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: IPAccessRuleSpec defines an IP Access Rule (Security → WAF
+              → Tools).
+            properties:
+              accountRef:
+                description: AccountRef selects the CloudflareAccount whose token
+                  is used.
+                properties:
+                  name:
+                    description: Name of the CloudflareAccount resource.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              deletionPolicy:
+                default: Delete
+                description: DeletionPolicy controls whether the rule is removed from
+                  Cloudflare on delete.
+                enum:
+                - Delete
+                - Retain
+                type: string
+              mode:
+                description: Mode of the rule.
+                enum:
+                - block
+                - challenge
+                - managed_challenge
+                - js_challenge
+                - whitelist
+                type: string
+              notes:
+                description: Notes shown in the dashboard.
+                type: string
+              scope:
+                default: zone
+                description: 'Scope: "zone" applies to one zone, "account" to every
+                  zone of the account.'
+                enum:
+                - zone
+                - account
+                type: string
+              target:
+                description: Target type of the value.
+                enum:
+                - ip
+                - ip_range
+                - asn
+                - country
+                type: string
+              value:
+                description: 'Value: an IP, a CIDR (/16 or /24 for IPv4, /32 to /64
+                  for IPv6), an ASN like AS13335, or a country code.'
+                minLength: 1
+                type: string
+              zone:
+                description: Zone the rule applies to (scope zone).
+                properties:
+                  id:
+                    description: ID of the zone (32 hex characters).
+                    type: string
+                  name:
+                    description: Name of the zone, e.g. "example.com".
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - message: exactly one of zone.name or zone.id must be set
+                  rule: has(self.name) != has(self.id)
+            required:
+            - accountRef
+            - mode
+            - target
+            - value
+            type: object
+            x-kubernetes-validations:
+            - message: zone is required when scope is zone
+              rule: self.scope != 'zone' || has(self.zone)
+          status:
+            description: IPAccessRuleStatus is the observed state of an IPAccessRule.
+            properties:
+              conditions:
+                description: Conditions describe the current state of the resource.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: ObservedGeneration is the metadata.generation the status
+                  reflects.
+                format: int64
+                type: integer
+              ruleID:
+                description: RuleID on Cloudflare.
+                type: string
+              zoneID:
+                description: ZoneID the rule was created in (zone scope).
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
