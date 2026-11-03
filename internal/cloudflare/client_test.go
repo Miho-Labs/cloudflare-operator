@@ -61,7 +61,7 @@ func TestZonesAndDNS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	found, err := c.FindDNSRecord(ctx, zoneID, "CNAME", "app.example.com")
+	found, err := c.FindDNSRecord(ctx, zoneID, "CNAME", "app.example.com", "x.cfargotunnel.com")
 	if err != nil || found == nil || found.ID != rec.ID {
 		t.Fatalf("find: %v %+v", err, found)
 	}
@@ -107,31 +107,59 @@ func TestZoneLookupErrors(t *testing.T) {
 	}
 }
 
-func TestFindDNSRecordAcrossProxiableTypes(t *testing.T) {
+func TestFindDNSRecordMatchesContent(t *testing.T) {
 	c, srv := newClient(t)
 	ctx := context.Background()
 	zoneID := srv.AddZone("example.com")
-	srv.DNSRecords["a"] = fake.DNSRecord{ID: "a", ZoneID: zoneID, Type: "A", Name: "app.example.com", Content: "192.0.2.1", TTL: 300}
-	srv.DNSRecords["txt"] = fake.DNSRecord{ID: "txt", ZoneID: zoneID, Type: "TXT", Name: "app.example.com", Content: "v=spf1"}
+	srv.DNSRecords["spf"] = fake.DNSRecord{ID: "spf", ZoneID: zoneID, Type: "TXT", Name: "example.com", Content: "v=spf1 -all"}
+	srv.DNSRecords["gsv"] = fake.DNSRecord{ID: "gsv", ZoneID: zoneID, Type: "TXT", Name: "example.com", Content: "google-site-verification=abc"}
+	srv.DNSRecords["mx1"] = fake.DNSRecord{ID: "mx1", ZoneID: zoneID, Type: "MX", Name: "example.com", Content: "mx1.mail.com."}
+	srv.DNSRecords["a"] = fake.DNSRecord{ID: "a", ZoneID: zoneID, Type: "A", Name: "app.example.com", Content: "192.0.2.1"}
+	srv.DNSRecords["a2"] = fake.DNSRecord{ID: "a2", ZoneID: zoneID, Type: "A", Name: "app.example.com", Content: "192.0.2.2"}
+	srv.DNSRecords["cn"] = fake.DNSRecord{ID: "cn", ZoneID: zoneID, Type: "CNAME", Name: "www.example.com", Content: "example.com"}
+	srv.DNSRecords["lone"] = fake.DNSRecord{ID: "lone", ZoneID: zoneID, Type: "A", Name: "lone.example.com", Content: "192.0.2.7"}
 
-	// A CNAME at a name that already has an A record finds the A record for conversion.
-	found, err := c.FindDNSRecord(ctx, zoneID, "CNAME", "app.example.com")
-	if err != nil || found == nil || found.ID != "a" {
-		t.Fatalf("expected the A record, got %+v %v", found, err)
+	cases := []struct {
+		typ, name, content, want string
+	}{
+		{"TXT", "example.com", "google-site-verification=abc", "gsv"}, // content picks the right sibling
+		{"TXT", "example.com", "v=spf1 -all", "spf"},
+		{"TXT", "example.com", "something-new", ""},  // no match → create, never adopt a sibling
+		{"MX", "example.com", "mx1.mail.com", "mx1"}, // trailing dot ignored
+		{"MX", "example.com", "mx2.mail.com", ""},
+		{"A", "app.example.com", "192.0.2.2", "a2"},
+		{"A", "app.example.com", "192.0.2.9", ""},               // several A records exist: create next to them
+		{"A", "lone.example.com", "192.0.2.9", "lone"},          // a lone A is taken over
+		{"TXT", "example.com", "nope", ""},                      // never take over a TXT/MX by name alone
+		{"CNAME", "app.example.com", "x.cfargotunnel.com", "a"}, // CNAME replaces whatever A sits there
+		{"A", "www.example.com", "192.0.2.5", "cn"},             // A replaces a CNAME
+		{"AAAA", "www.example.com", "2001:db8::1", "cn"},
 	}
-	// Non-proxiable types only match their own type.
-	found, err = c.FindDNSRecord(ctx, zoneID, "MX", "app.example.com")
-	if err != nil || found != nil {
-		t.Fatalf("expected nothing for MX, got %+v %v", found, err)
-	}
-	found, err = c.FindDNSRecord(ctx, zoneID, "TXT", "app.example.com")
-	if err != nil || found == nil || found.ID != "txt" {
-		t.Fatalf("expected the TXT record, got %+v %v", found, err)
+	for _, tc := range cases {
+		got, err := c.FindDNSRecord(ctx, zoneID, tc.typ, tc.name, tc.content)
+		if err != nil {
+			t.Fatalf("%s %s: %v", tc.typ, tc.name, err)
+		}
+		gotID := ""
+		if got != nil {
+			gotID = got.ID
+		}
+		if gotID != tc.want {
+			t.Fatalf("%s %s %q: got %q, want %q", tc.typ, tc.name, tc.content, gotID, tc.want)
+		}
 	}
 	// Converting the A record into a proxied CNAME works in place.
 	updated, err := c.UpdateDNSRecord(ctx, cloudflare.DNSRecord{ID: "a", ZoneID: zoneID, Type: "CNAME", Name: "app.example.com", Content: "x.cfargotunnel.com", Proxied: true, TTL: 1})
 	if err != nil || updated.Type != "CNAME" || !updated.Proxied {
 		t.Fatalf("convert: %+v %v", updated, err)
+	}
+	// Overwriting a record with a sibling's content is the duplicate error the controller recovers from.
+	_, err = c.UpdateDNSRecord(ctx, cloudflare.DNSRecord{ID: "gsv", ZoneID: zoneID, Type: "TXT", Name: "example.com", Content: "v=spf1 -all", TTL: 1})
+	if !cloudflare.IsDuplicateRecord(err) {
+		t.Fatalf("expected duplicate error, got %v", err)
+	}
+	if cloudflare.TruncateComment(strings.Repeat("x", 150)) != strings.Repeat("x", 100) {
+		t.Fatal("comment not truncated")
 	}
 }
 

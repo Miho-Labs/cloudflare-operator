@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 
 	"github.com/miho-labs/cloudflare-operator/api/v1alpha1"
+	"github.com/miho-labs/cloudflare-operator/internal/cloudflare"
 )
 
 // TunnelIngressReconciler validates ingress rules, creates their DNS records and reports readiness.
@@ -130,8 +131,9 @@ func (r *TunnelIngressReconciler) ensureDNSRecord(ctx context.Context, ti *v1alp
 			DeletionPolicy: deletionPolicy(ti.Spec.DNS.DeletionPolicy),
 		}
 		if rec.Spec.Comment == "" {
-			rec.Spec.Comment = fmt.Sprintf("managed by cloudflare-operator (TunnelIngress %s/%s)", ti.Namespace, ti.Name)
+			rec.Spec.Comment = fmt.Sprintf("cloudflare-operator: TunnelIngress %s/%s", ti.Namespace, ti.Name)
 		}
+		rec.Spec.Comment = cloudflare.TruncateComment(rec.Spec.Comment)
 		return controllerutil.SetControllerReference(ti, rec, r.Scheme())
 	})
 	if err != nil {

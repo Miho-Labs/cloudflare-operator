@@ -84,7 +84,7 @@ func desiredRecord(rec *v1alpha1.DNSRecord, zoneID string) cloudflare.DNSRecord 
 		TTL:      ttl,
 		Proxied:  rec.Spec.Proxied,
 		Priority: rec.Spec.Priority,
-		Comment:  rec.Spec.Comment,
+		Comment:  cloudflare.TruncateComment(rec.Spec.Comment),
 		Tags:     rec.Spec.Tags,
 	}
 }
@@ -114,7 +114,7 @@ func (r *DNSRecordReconciler) reconcile(ctx context.Context, rec *v1alpha1.DNSRe
 		}
 	}
 	if current == nil {
-		current, err = cl.FindDNSRecord(ctx, zone.ID, desired.Type, desired.Name)
+		current, err = cl.FindDNSRecord(ctx, zone.ID, desired.Type, desired.Name, desired.Content)
 		if err != nil {
 			return err
 		}
@@ -138,6 +138,28 @@ func (r *DNSRecordReconciler) reconcile(ctx context.Context, rec *v1alpha1.DNSRe
 	case !current.Equal(desired):
 		desired.ID = current.ID
 		updated, err := cl.UpdateDNSRecord(ctx, desired)
+		if err != nil && cloudflare.IsDuplicateRecord(err) {
+			// The desired record already exists under another ID: this object was pointing at a
+			// sibling record of the same name (older adoption ignored content, or the user changed
+			// content to an existing value). Re-point at the matching record and leave the sibling
+			// alone, it belongs to someone else.
+			existing, findErr := cl.FindDNSRecord(ctx, zone.ID, desired.Type, desired.Name, desired.Content)
+			if findErr != nil {
+				return findErr
+			}
+			if existing == nil || existing.ID == current.ID {
+				return err
+			}
+			r.Recorder.Eventf(rec, corev1.EventTypeNormal, EventAdopted, "re-pointed from record %s to existing %s record %s (%s) with matching content", current.ID, existing.Type, existing.Name, existing.ID)
+			current = existing
+			if !current.Equal(desired) {
+				desired.ID = current.ID
+				if current, err = cl.UpdateDNSRecord(ctx, desired); err != nil {
+					return err
+				}
+			}
+			break
+		}
 		if err != nil {
 			return err
 		}

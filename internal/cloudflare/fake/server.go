@@ -377,8 +377,18 @@ func (s *Server) createDNS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, existing := range s.DNSRecords {
-		if existing.ZoneID == zone && strings.EqualFold(existing.Name, rec.Name) && proxiable(existing.Type) && proxiable(rec.Type) {
+		if existing.ZoneID == zone && strings.EqualFold(existing.Name, rec.Name) && proxiable(existing.Type) && proxiable(rec.Type) && (existing.Type == "CNAME" || rec.Type == "CNAME") {
 			writeError(w, 400, 81053, "An A, AAAA, or CNAME record with that host already exists.")
+			return
+		}
+	}
+	if len(rec.Comment) > 100 {
+		writeError(w, 400, 9313, "DNS record comment exceeds the maximum length of 100 characters.")
+		return
+	}
+	for _, existing := range s.DNSRecords {
+		if existing.ZoneID == zone && strings.EqualFold(existing.Name, rec.Name) && existing.Type == rec.Type && existing.Content == rec.Content {
+			writeError(w, 400, 81058, "An identical record already exists.")
 			return
 		}
 	}
@@ -415,6 +425,16 @@ func (s *Server) updateDNS(w http.ResponseWriter, r *http.Request) {
 	if err := decode(r, &rec); err != nil {
 		writeError(w, 400, 1001, err.Error())
 		return
+	}
+	if len(rec.Comment) > 100 {
+		writeError(w, 400, 9313, "DNS record comment exceeds the maximum length of 100 characters.")
+		return
+	}
+	for otherID, other := range s.DNSRecords {
+		if otherID != id && other.ZoneID == existing.ZoneID && strings.EqualFold(other.Name, rec.Name) && other.Type == rec.Type && other.Content == rec.Content {
+			writeError(w, 400, 81058, "An identical record already exists.")
+			return
+		}
 	}
 	rec.ID = id
 	rec.ZoneID = existing.ZoneID

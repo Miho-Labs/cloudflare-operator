@@ -31,6 +31,7 @@ const (
 const (
 	DefaultResyncPeriod = 10 * time.Minute
 	requeueRateLimited  = time.Minute
+	requeueAuth         = 5 * time.Minute
 	requeueDependency   = 15 * time.Second
 	requeueAccount      = 30 * time.Second
 )
@@ -122,6 +123,12 @@ func finish(obj client.Object, st Conditions, err error, resync time.Duration) (
 	if cloudflare.IsRateLimited(err) {
 		setSyncFailed(obj, st, v1alpha1.ReasonAPIError, "rate limited by Cloudflare: "+cloudflare.Message(err))
 		return ctrl.Result{RequeueAfter: requeueRateLimited}, nil
+	}
+	if cloudflare.IsAuthError(err) {
+		// Permissions do not fix themselves; retry slowly and keep the hint in the condition
+		// instead of a stack trace per object in the logs.
+		setSyncFailed(obj, st, v1alpha1.ReasonAPIError, "Cloudflare denied the request: the API token lacks permission for this resource (check the token's permissions and zone/account scope): "+cloudflare.Message(err))
+		return ctrl.Result{RequeueAfter: requeueAuth}, nil
 	}
 	reason := v1alpha1.ReasonAPIError
 	if cloudflare.StatusCode(err) == 0 {

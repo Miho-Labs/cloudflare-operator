@@ -154,11 +154,30 @@ func (c *Client) GetDNSRecord(ctx context.Context, zoneID, id string) (*DNSRecor
 	return &rec, nil
 }
 
-// FindDNSRecord looks a record up by type and exact name. Returns nil when none exists.
-// For A, AAAA and CNAME, which cannot coexist at one name, a record of one of the other two types
-// at that name is returned instead so the caller can adopt and convert it rather than hit
-// Cloudflare's "record with that host already exists" error.
-func (c *Client) FindDNSRecord(ctx context.Context, zoneID, recordType, name string) (*DNSRecord, error) {
+// MaxCommentLength is Cloudflare's limit for DNS record comments.
+const MaxCommentLength = 100
+
+// TruncateComment cuts a comment to MaxCommentLength.
+func TruncateComment(s string) string {
+	if len(s) <= MaxCommentLength {
+		return s
+	}
+	return s[:MaxCommentLength]
+}
+
+// IsDuplicateRecord reports Cloudflare error 81058 "An identical record already exists".
+func IsDuplicateRecord(err error) bool { return HasCode(err, 81058) }
+
+// FindDNSRecord looks up the record a DNSRecord should adopt: same type, exact name and matching
+// content. Names can carry several records of one type (TXT at the apex, MX, NS...), so content is
+// part of the identity; without it every object at a name would adopt the same first record.
+//
+// The A/AAAA/CNAME family gets two extra rules because a CNAME excludes everything else at a name:
+// a desired CNAME takes over whatever A/AAAA/CNAME exists there, and a desired A/AAAA takes over an
+// existing CNAME. A desired A/AAAA also adopts a lone existing record of its type with different
+// content (the usual "manage this address record" intent); when several exist, a new one is
+// created next to them. Returns nil when nothing matches.
+func (c *Client) FindDNSRecord(ctx context.Context, zoneID, recordType, name, content string) (*DNSRecord, error) {
 	recordType = strings.ToUpper(recordType)
 	params := dns.RecordListParams{
 		ZoneID:  cf.F(zoneID),
@@ -172,20 +191,31 @@ func (c *Client) FindDNSRecord(ctx context.Context, zoneID, recordType, name str
 	if err != nil {
 		return nil, fmt.Errorf("list dns records: %w", err)
 	}
-	var sibling *DNSRecord
+	var convertible *DNSRecord
+	var sameType []DNSRecord
 	for _, r := range page.Result {
 		if !strings.EqualFold(r.Name, name) {
 			continue
 		}
 		rec := fromRecordResponse(zoneID, r)
 		if strings.EqualFold(rec.Type, recordType) {
-			return &rec, nil
+			if contentEqual(recordType, rec.Content, content) {
+				return &rec, nil
+			}
+			sameType = append(sameType, rec)
+			continue
 		}
-		if Proxiable(recordType) && Proxiable(rec.Type) && sibling == nil {
-			sibling = &rec
+		if convertible == nil && Proxiable(recordType) && Proxiable(rec.Type) && (recordType == "CNAME" || rec.Type == "CNAME") {
+			convertible = &rec
 		}
 	}
-	return sibling, nil
+	if convertible != nil {
+		return convertible, nil
+	}
+	if Proxiable(recordType) && len(sameType) == 1 {
+		return &sameType[0], nil
+	}
+	return nil, nil
 }
 
 // CreateDNSRecord creates a record.

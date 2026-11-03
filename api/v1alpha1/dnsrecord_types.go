@@ -41,7 +41,8 @@ type DNSRecordSpec struct {
 	// Priority for MX and SRV records.
 	// +optional
 	Priority *int `json:"priority,omitempty"`
-	// Comment shown in the dashboard.
+	// Comment shown in the dashboard (Cloudflare allows at most 100 characters).
+	// +kubebuilder:validation:MaxLength=100
 	// +optional
 	Comment string `json:"comment,omitempty"`
 	// Tags attached to the record (requires a plan that supports record tags).

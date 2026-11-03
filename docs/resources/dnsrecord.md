@@ -37,7 +37,7 @@ spec:
 | `ttl` | int | `1` | Seconds; `1` means automatic. Proxied records are always automatic. |
 | `proxied` | bool | `false` | Route through Cloudflare (A, AAAA, CNAME only). |
 | `priority` | int | | MX and SRV priority. |
-| `comment` | string | | Comment shown in the dashboard. |
+| `comment` | string | | Comment shown in the dashboard, at most 100 characters. |
 | `tags` | []string | | Record tags (plan permitting). |
 | `deletionPolicy` | `Delete`, `Retain` | `Delete` | Whether to delete the record from Cloudflare. |
 
@@ -50,9 +50,16 @@ spec:
 
 ## Behaviour
 
-- **Adoption**: before creating, the controller looks for a record with the same type and name in
-  the zone. If one exists it is adopted and updated to match the spec. This makes it safe to import
-  records created by hand.
+- **Adoption**: before creating, the controller looks for a record in the zone with the same type,
+  name **and content** and adopts it, so records created by hand can be imported safely. Several
+  records of one type at one name (TXT at the apex, MX, NS) are therefore handled individually: a
+  DNSRecord whose content matches none of them creates a new record next to them.
+  Two extra rules apply to A/AAAA/CNAME, which cannot coexist with a CNAME at one name: a desired
+  CNAME takes over whatever A/AAAA/CNAME exists there, and a desired A/AAAA takes over an existing
+  CNAME or a *lone* existing record of its type with different content (when several exist, a new
+  one is created).
+- **Duplicates**: if an update is rejected because an identical record already exists (error
+  81058), the object is re-pointed at that record and the previously referenced one is left alone.
 - **Drift**: every resync the record is compared field by field (type, name, content, proxied, TTL
   unless proxied, priority, comment, tags) and overwritten when it differs. CNAME/MX/NS targets are
   compared case-insensitively and ignoring a trailing dot.

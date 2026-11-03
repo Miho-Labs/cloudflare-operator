@@ -154,6 +154,85 @@ func TestDNSRecordZoneInOtherAccount(t *testing.T) {
 	}
 }
 
+func TestDNSRecordMultiValueAdoptionAndRecovery(t *testing.T) {
+	spf := dnsRecord("spf")
+	spf.Spec.Type, spf.Spec.Name, spf.Spec.Content = "TXT", "example.com", "v=spf1 -all"
+	gsv := dnsRecord("gsv")
+	gsv.Spec.Type, gsv.Spec.Name, gsv.Spec.Content = "TXT", "example.com", "google-site-verification=abc"
+	fresh := dnsRecord("fresh")
+	fresh.Spec.Type, fresh.Spec.Name, fresh.Spec.Content = "TXT", "example.com", "brand-new"
+	e := newEnv(t, spf, gsv, fresh)
+	zoneID := e.cf.AddZone("example.com")
+	e.cf.DNSRecords["spf"] = fake.DNSRecord{ID: "spf", ZoneID: zoneID, Type: "TXT", Name: "example.com", Content: "v=spf1 -all", TTL: 1}
+	e.cf.DNSRecords["gsv"] = fake.DNSRecord{ID: "gsv", ZoneID: zoneID, Type: "TXT", Name: "example.com", Content: "google-site-verification=abc", TTL: 1}
+	r := &DNSRecordReconciler{Client: e.k8s, Recorder: e.recorder, Clients: e.clients}
+
+	for _, name := range []string{"spf", "gsv", "fresh"} {
+		if _, err := r.Reconcile(e.ctx, e.req(testNS, name)); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	e.get(spf)
+	e.get(gsv)
+	e.get(fresh)
+	if spf.Status.RecordID != "spf" || gsv.Status.RecordID != "gsv" {
+		t.Fatalf("adoption must match content: spf=%s gsv=%s", spf.Status.RecordID, gsv.Status.RecordID)
+	}
+	if fresh.Status.RecordID == "" || fresh.Status.RecordID == "spf" || fresh.Status.RecordID == "gsv" {
+		t.Fatalf("unmatched content must create a new record, got %q", fresh.Status.RecordID)
+	}
+	if len(e.cf.DNSRecords) != 3 {
+		t.Fatalf("expected 3 remote records, got %d", len(e.cf.DNSRecords))
+	}
+	assertReady(t, fresh.Status.Conditions, true)
+
+	// Recovery: an object left pointing at a sibling (old adoption bug) re-points instead of failing.
+	e.get(gsv)
+	gsv.Status.RecordID = "spf"
+	if err := e.k8s.Status().Update(e.ctx, gsv); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Reconcile(e.ctx, e.req(testNS, "gsv")); err != nil {
+		t.Fatal(err)
+	}
+	e.get(gsv)
+	assertReady(t, gsv.Status.Conditions, true)
+	if gsv.Status.RecordID != "gsv" {
+		t.Fatalf("expected re-point to gsv, got %s", gsv.Status.RecordID)
+	}
+	if e.cf.DNSRecords["spf"].Content != "v=spf1 -all" {
+		t.Fatal("the sibling record must not be modified")
+	}
+}
+
+func TestDNSRecordCommentTruncatedAndAuthQuiet(t *testing.T) {
+	rec := dnsRecord("www")
+	rec.Spec.Comment = strings.Repeat("c", 150)
+	e := newEnv(t, rec)
+	zoneID := e.cf.AddZone("example.com")
+	r := &DNSRecordReconciler{Client: e.k8s, Recorder: e.recorder, Clients: e.clients}
+	if _, err := r.Reconcile(e.ctx, e.req(testNS, "www")); err != nil {
+		t.Fatal(err)
+	}
+	e.get(rec)
+	assertReady(t, rec.Status.Conditions, true)
+	if got := e.cf.DNSRecords[rec.Status.RecordID].Comment; len(got) != 100 {
+		t.Fatalf("comment length %d", len(got))
+	}
+
+	// A 403 sets a hint and requeues quietly instead of returning an error.
+	e.cf.Fail["GET /zones/"+zoneID+"/dns_records/"+rec.Status.RecordID] = 403
+	res, err := r.Reconcile(e.ctx, e.req(testNS, "www"))
+	if err != nil || res.RequeueAfter != requeueAuth {
+		t.Fatalf("auth error should requeue quietly: %v %+v", err, res)
+	}
+	e.get(rec)
+	c := readyCondition(rec.Status.Conditions)
+	if c.Status != metav1.ConditionFalse || !strings.Contains(c.Message, "lacks permission") {
+		t.Fatalf("condition: %+v", c)
+	}
+}
+
 func TestDNSRecordRetain(t *testing.T) {
 	rec := dnsRecord("www")
 	rec.Spec.DeletionPolicy = v1alpha1.DeletionPolicyRetain

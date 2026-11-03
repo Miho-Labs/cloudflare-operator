@@ -72,7 +72,9 @@ spec:
                 - name
                 type: object
               comment:
-                description: Comment shown in the dashboard.
+                description: Comment shown in the dashboard (Cloudflare allows at
+                  most 100 characters).
+                maxLength: 100
                 type: string
               content:
                 description: Content of the record (IP, hostname, text...).
