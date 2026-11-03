@@ -115,6 +115,19 @@ bucket set, tracked by a policy hash annotation on the Secret) results in a new 
 deleted). `R2Bucket.spec.apiToken` and `R2AccessKey` share this logic (`internal/controller/r2token.go`);
 the key variant can span several buckets, including ones the operator does not manage.
 
+## Zone security rules
+
+`RateLimitRule`, `WAFRule` and `ManagedWAFRule` are rules inside a zone's *phase entrypoint ruleset*
+(`http_ratelimit`, `http_request_firewall_custom`, `http_request_firewall_managed`) of the Rulesets
+API. One Kubernetes object is one rule, so rules created in the dashboard coexist untouched. The
+shared helper (`internal/controller/rulesetrule.go`) creates the entrypoint on first use, looks the
+rule up by `status.ruleID`, adopts an existing rule by description, and uses the per-rule
+`POST`/`PATCH`/`DELETE` endpoints so other rules are never rewritten. `ManagedWAFRule` resolves the
+managed ruleset name to its ID by listing the zone's `kind: managed` rulesets and emits an `execute`
+rule with overrides. `IPAccessRule` uses the Firewall Access Rules API at zone or account scope,
+adopting by (`target`, `value`); since target and value are immutable there, a change replaces the
+rule.
+
 ## Multi-tenancy and RBAC
 
 The operator needs cluster-wide read/write on its CRDs, Secrets, Deployments and Events. The

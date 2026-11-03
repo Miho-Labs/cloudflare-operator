@@ -229,6 +229,14 @@ func AccountRefIndexer(obj client.Object) []string {
 		return []string{o.Spec.AccountRef.Name}
 	case *v1alpha1.AccessServiceToken:
 		return []string{o.Spec.AccountRef.Name}
+	case *v1alpha1.RateLimitRule:
+		return []string{o.Spec.AccountRef.Name}
+	case *v1alpha1.WAFRule:
+		return []string{o.Spec.AccountRef.Name}
+	case *v1alpha1.ManagedWAFRule:
+		return []string{o.Spec.AccountRef.Name}
+	case *v1alpha1.IPAccessRule:
+		return []string{o.Spec.AccountRef.Name}
 	}
 	return nil
 }

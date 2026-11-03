@@ -69,6 +69,7 @@ func newEnv(t *testing.T, objs ...client.Object) *env {
 		WithStatusSubresource(
 			&v1alpha1.CloudflareAccount{}, &v1alpha1.DNSRecord{}, &v1alpha1.Tunnel{}, &v1alpha1.TunnelIngress{},
 			&v1alpha1.R2Bucket{}, &v1alpha1.R2AccessKey{}, &v1alpha1.AccessApplication{}, &v1alpha1.AccessGroup{}, &v1alpha1.AccessServiceToken{},
+			&v1alpha1.RateLimitRule{}, &v1alpha1.WAFRule{}, &v1alpha1.ManagedWAFRule{}, &v1alpha1.IPAccessRule{},
 		).
 		WithIndex(&v1alpha1.DNSRecord{}, IndexAccountRef, AccountRefIndexer).
 		WithIndex(&v1alpha1.Tunnel{}, IndexAccountRef, AccountRefIndexer).
@@ -77,6 +78,10 @@ func newEnv(t *testing.T, objs ...client.Object) *env {
 		WithIndex(&v1alpha1.AccessApplication{}, IndexAccountRef, AccountRefIndexer).
 		WithIndex(&v1alpha1.AccessGroup{}, IndexAccountRef, AccountRefIndexer).
 		WithIndex(&v1alpha1.AccessServiceToken{}, IndexAccountRef, AccountRefIndexer).
+		WithIndex(&v1alpha1.RateLimitRule{}, IndexAccountRef, AccountRefIndexer).
+		WithIndex(&v1alpha1.WAFRule{}, IndexAccountRef, AccountRefIndexer).
+		WithIndex(&v1alpha1.ManagedWAFRule{}, IndexAccountRef, AccountRefIndexer).
+		WithIndex(&v1alpha1.IPAccessRule{}, IndexAccountRef, AccountRefIndexer).
 		WithIndex(&v1alpha1.TunnelIngress{}, IndexTunnelRef, TunnelRefIndexer).
 		WithIndex(&v1alpha1.CloudflareAccount{}, IndexSecretRef, SecretRefIndexer).
 		Build()

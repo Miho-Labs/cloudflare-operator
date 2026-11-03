@@ -108,6 +108,10 @@ func main() {
 		&controller.AccessGroupReconciler{Client: mgr.GetClient(), Recorder: rec, Clients: clients, ResyncPeriod: resyncPeriod},
 		&controller.AccessServiceTokenReconciler{Client: mgr.GetClient(), Recorder: rec, Clients: clients, ResyncPeriod: resyncPeriod},
 		&controller.AccessApplicationReconciler{Client: mgr.GetClient(), Recorder: rec, Clients: clients, ResyncPeriod: resyncPeriod},
+		&controller.RateLimitRuleReconciler{Client: mgr.GetClient(), Recorder: rec, Clients: clients, ResyncPeriod: resyncPeriod},
+		&controller.WAFRuleReconciler{Client: mgr.GetClient(), Recorder: rec, Clients: clients, ResyncPeriod: resyncPeriod},
+		&controller.ManagedWAFRuleReconciler{Client: mgr.GetClient(), Recorder: rec, Clients: clients, ResyncPeriod: resyncPeriod},
+		&controller.IPAccessRuleReconciler{Client: mgr.GetClient(), Recorder: rec, Clients: clients, ResyncPeriod: resyncPeriod},
 	}
 	for _, r := range reconcilers {
 		if err := r.SetupWithManager(mgr); err != nil {
@@ -140,6 +144,7 @@ func registerIndexes(mgr ctrl.Manager) error {
 	for _, obj := range []client.Object{
 		&v1alpha1.DNSRecord{}, &v1alpha1.Tunnel{}, &v1alpha1.R2Bucket{}, &v1alpha1.R2AccessKey{},
 		&v1alpha1.AccessApplication{}, &v1alpha1.AccessGroup{}, &v1alpha1.AccessServiceToken{},
+		&v1alpha1.RateLimitRule{}, &v1alpha1.WAFRule{}, &v1alpha1.ManagedWAFRule{}, &v1alpha1.IPAccessRule{},
 	} {
 		if err := indexer.IndexField(ctx, obj, controller.IndexAccountRef, controller.AccountRefIndexer); err != nil {
 			return err

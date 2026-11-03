@@ -361,3 +361,120 @@ func TestAccess(t *testing.T) {
 		t.Fatal("app should be gone")
 	}
 }
+
+func TestRulesetsAndRules(t *testing.T) {
+	c, srv := newClient(t)
+	ctx := context.Background()
+	zoneID := srv.AddZone("example.com")
+
+	if rs, err := c.GetPhaseEntrypoint(ctx, zoneID, cloudflare.PhaseRateLimit); err != nil || rs != nil {
+		t.Fatalf("no entrypoint expected: %v %+v", err, rs)
+	}
+	rs, err := c.EnsurePhaseEntrypoint(ctx, zoneID, cloudflare.PhaseRateLimit)
+	if err != nil || rs.ID == "" || rs.Phase != cloudflare.PhaseRateLimit {
+		t.Fatalf("ensure: %v %+v", err, rs)
+	}
+	again, err := c.EnsurePhaseEntrypoint(ctx, zoneID, cloudflare.PhaseRateLimit)
+	if err != nil || again.ID != rs.ID {
+		t.Fatalf("ensure must be idempotent: %v %+v", err, again)
+	}
+
+	enabled := true
+	first := cloudflare.Rule{Description: "api limit", Expression: `(http.request.uri.path wildcard "/api/*")`, Action: "block",
+		Enabled: &enabled, Ratelimit: &cloudflare.RatelimitParams{Characteristics: []string{"ip.src", "cf.colo.id"}, Period: 10, RequestsPerPeriod: 100, MitigationTimeout: 10}}
+	r1, err := c.AddRule(ctx, zoneID, rs.ID, first, nil)
+	if err != nil || r1.ID == "" {
+		t.Fatalf("add: %v %+v", err, r1)
+	}
+	second := first
+	second.Description = "login limit"
+	second.Expression = `(http.request.uri.path eq "/login")`
+	r2, err := c.AddRule(ctx, zoneID, rs.ID, second, &cloudflare.RulePosition{Index: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rs, _ = c.GetPhaseEntrypoint(ctx, zoneID, cloudflare.PhaseRateLimit)
+	if rs.RuleIndex(r2.ID) != 1 || rs.RuleIndex(r1.ID) != 2 {
+		t.Fatalf("position not honoured: %+v", rs.Rules)
+	}
+	got := rs.FindRuleByDescription("api limit")
+	if got == nil || !got.Equal(first) {
+		t.Fatalf("round trip mismatch: %+v vs %+v", got, first)
+	}
+	first.Ratelimit.RequestsPerPeriod = 50
+	if got.Equal(first) {
+		t.Fatal("changed ratelimit must not compare equal")
+	}
+	upd, err := c.UpdateRule(ctx, zoneID, rs.ID, r1.ID, first, nil)
+	if err != nil || upd.Ratelimit.RequestsPerPeriod != 50 || upd.ID != r1.ID {
+		t.Fatalf("update: %v %+v", err, upd)
+	}
+	if err := c.DeleteRule(ctx, zoneID, rs.ID, r1.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.DeleteRule(ctx, zoneID, rs.ID, r1.ID); err != nil {
+		t.Fatalf("second delete must be a no-op: %v", err)
+	}
+	rs, _ = c.GetPhaseEntrypoint(ctx, zoneID, cloudflare.PhaseRateLimit)
+	if len(rs.Rules) != 1 {
+		t.Fatalf("expected one rule left, got %d", len(rs.Rules))
+	}
+
+	managed, err := c.ListManagedRulesets(ctx, zoneID)
+	if err != nil || len(managed) != 4 {
+		t.Fatalf("managed rulesets: %v %d", err, len(managed))
+	}
+	// Managed deployment with action parameters survives the round trip.
+	mrs, _ := c.EnsurePhaseEntrypoint(ctx, zoneID, cloudflare.PhaseFirewallManaged)
+	exec := cloudflare.Rule{Description: "owasp", Expression: "true", Action: "execute", ActionParameters: map[string]any{
+		"id": managed[0].ID, "overrides": map[string]any{"action": "log", "categories": []map[string]any{{"category": "wordpress", "enabled": false}}},
+	}}
+	if _, err := c.AddRule(ctx, zoneID, mrs.ID, exec, nil); err != nil {
+		t.Fatal(err)
+	}
+	mrs, _ = c.GetPhaseEntrypoint(ctx, zoneID, cloudflare.PhaseFirewallManaged)
+	if got := mrs.FindRuleByDescription("owasp"); got == nil || !got.Equal(exec) {
+		t.Fatalf("execute rule round trip: %+v", got)
+	}
+}
+
+func TestIPAccessRules(t *testing.T) {
+	c, srv := newClient(t)
+	ctx := context.Background()
+	zoneID := srv.AddZone("example.com")
+	scope := cloudflare.IPAccessScope(zoneID)
+
+	created, err := c.CreateIPAccessRule(ctx, scope, cloudflare.IPAccessRule{Mode: "block", Target: "country", Value: "RU", Notes: "no"})
+	if err != nil || created.ID == "" || created.Target != "country" {
+		t.Fatalf("create: %v %+v", err, created)
+	}
+	found, err := c.FindIPAccessRule(ctx, scope, "country", "ru")
+	if err != nil || found == nil || found.ID != created.ID {
+		t.Fatalf("find: %v %+v", err, found)
+	}
+	if _, err := c.CreateIPAccessRule(ctx, scope, cloudflare.IPAccessRule{Mode: "block", Target: "country", Value: "RU"}); !cloudflare.HasCode(err, 10009) {
+		t.Fatalf("expected duplicate error, got %v", err)
+	}
+	created.Mode = "managed_challenge"
+	upd, err := c.UpdateIPAccessRule(ctx, scope, *created)
+	if err != nil || upd.Mode != "managed_challenge" {
+		t.Fatalf("update: %v %+v", err, upd)
+	}
+	// Account scope is separate from zone scope.
+	acct, err := c.CreateIPAccessRule(ctx, "", cloudflare.IPAccessRule{Mode: "whitelist", Target: "ip", Value: "203.0.113.5"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := c.FindIPAccessRule(ctx, scope, "ip", "203.0.113.5"); got != nil {
+		t.Fatal("account rule must not be visible in zone scope")
+	}
+	if err := c.DeleteIPAccessRule(ctx, "", acct.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.DeleteIPAccessRule(ctx, scope, created.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := c.GetIPAccessRule(ctx, scope, created.ID); got != nil {
+		t.Fatal("rule should be gone")
+	}
+}

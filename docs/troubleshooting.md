@@ -26,6 +26,10 @@ kubectl -n cloudflare-operator logs deploy/cloudflare-operator
 | `R2Bucket` error `permission group ... not found` | Operator token lacks *Account API Tokens: Edit* | Add the permission; needed to create bucket-scoped tokens. |
 | `R2Bucket` stuck `Deleting`, message `bucket is not empty` | Cloudflare refuses to delete non-empty buckets | Empty the bucket or set `deletionPolicy: Retain`. |
 | `AccessApplication` error `domain_conflict` | Another app already protects the domain and was not adopted (different path form) | Use the exact `domain` string of the existing application so it is adopted. |
+| `RateLimitRule` / `WAFRule` / `ManagedWAFRule` `Synced=False` with a `20xxx` error such as `period must be 10` or `invalid expression` | Cloudflare rejected the rule: plan limit (rate limit periods other than 10 s need Business/Enterprise, custom rule count, managed rulesets need Pro) or a syntax error in `expression` | Fix the spec; the message quotes Cloudflare's validation error. |
+| `ManagedWAFRule` `Ready=False`, `managed ruleset "..." is not available on this zone` | The zone's plan does not include that managed ruleset (Free has only `cloudflare-free-managed`) | Upgrade the plan or pick an available ruleset; retried hourly. |
+| `IPAccessRule` error `firewallaccessrules.api.duplicate_of_existing` | A rule for the same target/value was created in the dashboard between two reconciles | Self-healing: it is adopted on the next pass. |
+| Security rule `Synced=False` with `token lacks permission` | Token missing *Zone WAF: Edit* (rulesets), *Firewall Services: Edit* (zone IP rules) or *Account Firewall Access Rule: Edit* (account IP rules) | Add the permission in a policy scoped to the zone (All Domains / Specified Domains for account-owned tokens). |
 | HTTP 429 in conditions | Cloudflare rate limit (1200 req / 5 min per token) | Reconciles back off automatically; raise `operator.resyncPeriod` for large fleets. |
 | Changes made in the dashboard keep reverting | Expected: the spec is the source of truth | Edit the Kubernetes object, or delete it with `deletionPolicy: Retain`. |
 

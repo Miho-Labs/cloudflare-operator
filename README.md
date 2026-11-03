@@ -14,6 +14,10 @@ token and account ID per `CloudflareAccount`.
 | `AccessApplication` | A Zero Trust Access self-hosted application with inline policies. |
 | `AccessGroup` | A reusable Access group referenced by policies. |
 | `AccessServiceToken` | An Access service token for machine clients, stored in a Secret and refreshed before expiry. |
+| `RateLimitRule` | One rate limiting rule in a zone, with a custom block response. |
+| `WAFRule` | One custom WAF rule in a zone (block, challenge, log or skip). |
+| `ManagedWAFRule` | A Cloudflare managed ruleset (OWASP, Cloudflare Managed, ...) deployed on a zone with overrides. |
+| `IPAccessRule` | An IP / range / ASN / country access rule at zone or account level. |
 
 Every resource reports `Ready`/`Synced` conditions, adopts pre-existing Cloudflare objects with the
 same natural key instead of duplicating them, corrects drift on a periodic resync, and honours
@@ -98,7 +102,9 @@ rule to the tunnel configuration and creates the proxied CNAME `app.example.com`
   [DNSRecord](docs/resources/dnsrecord.md), [R2Bucket](docs/resources/r2bucket.md),
   [R2AccessKey](docs/resources/r2accesskey.md),
   [AccessApplication](docs/resources/accessapplication.md), [AccessGroup](docs/resources/accessgroup.md),
-  [AccessServiceToken](docs/resources/accessservicetoken.md).
+  [AccessServiceToken](docs/resources/accessservicetoken.md),
+  [RateLimitRule](docs/resources/ratelimitrule.md), [WAFRule](docs/resources/wafrule.md),
+  [ManagedWAFRule](docs/resources/managedwafrule.md), [IPAccessRule](docs/resources/ipaccessrule.md).
 - [Troubleshooting](docs/troubleshooting.md)
 - [Contributing](CONTRIBUTING.md): development setup, releasing, and a step-by-step guide for adding a new Cloudflare service.
 

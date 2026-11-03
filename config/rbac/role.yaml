@@ -42,10 +42,14 @@ rules:
   - accessgroups
   - accessservicetokens
   - dnsrecords
+  - ipaccessrules
+  - managedwafrules
   - r2accesskeys
   - r2buckets
+  - ratelimitrules
   - tunnelingresses
   - tunnels
+  - wafrules
   verbs:
   - create
   - delete
@@ -61,9 +65,13 @@ rules:
   - accessgroups/finalizers
   - accessservicetokens/finalizers
   - dnsrecords/finalizers
+  - ipaccessrules/finalizers
+  - managedwafrules/finalizers
   - r2accesskeys/finalizers
   - r2buckets/finalizers
+  - ratelimitrules/finalizers
   - tunnels/finalizers
+  - wafrules/finalizers
   verbs:
   - update
 - apiGroups:
@@ -74,10 +82,14 @@ rules:
   - accessservicetokens/status
   - cloudflareaccounts/status
   - dnsrecords/status
+  - ipaccessrules/status
+  - managedwafrules/status
   - r2accesskeys/status
   - r2buckets/status
+  - ratelimitrules/status
   - tunnelingresses/status
   - tunnels/status
+  - wafrules/status
   verbs:
   - get
   - patch
