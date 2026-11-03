@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -246,6 +247,33 @@ func TestTunnelWithIngresses(t *testing.T) {
 	if app.Status.DNSRecordName != "" {
 		t.Fatal("dnsRecordName should be cleared")
 	}
+}
+
+func TestTunnelIngressLongNameComment(t *testing.T) {
+	tun := tunnel("edge")
+	ti := tunnelIngress(strings.Repeat("very-long-name-", 8), "edge", "long.example.com")
+	e := newEnv(t, tun, ti)
+	e.cf.AddZone("example.com")
+	tr := &TunnelReconciler{Client: e.k8s, Recorder: e.recorder, Clients: e.clients}
+	ir := &TunnelIngressReconciler{Client: e.k8s, Recorder: e.recorder, Clients: e.clients}
+	dr := &DNSRecordReconciler{Client: e.k8s, Recorder: e.recorder, Clients: e.clients}
+	if _, err := tr.Reconcile(e.ctx, e.req(testNS, "edge")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ir.Reconcile(e.ctx, e.req(testNS, ti.Name)); err != nil {
+		t.Fatal(err)
+	}
+	rec := &v1alpha1.DNSRecord{}
+	rec.Name, rec.Namespace = DNSRecordName(ti), testNS
+	e.get(rec)
+	if len(rec.Spec.Comment) > 100 {
+		t.Fatalf("generated comment too long: %d", len(rec.Spec.Comment))
+	}
+	if _, err := dr.Reconcile(e.ctx, e.req(testNS, rec.Name)); err != nil {
+		t.Fatal(err)
+	}
+	e.get(rec)
+	assertReady(t, rec.Status.Conditions, true)
 }
 
 func TestTunnelIngressInvalidService(t *testing.T) {

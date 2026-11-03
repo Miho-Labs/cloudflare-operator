@@ -53,9 +53,14 @@ curl -s https://api.cloudflare.com/client/v4/user/tokens/verify \
 # "active"
 ```
 
-> **Account-owned tokens.** If your organisation uses account-owned API tokens (Manage Account →
-> Account API Tokens) instead of user tokens, they work the same way. Give them the same
-> permissions. The operator verifies the account with `GET /accounts/{id}`, which works for both.
+> **Account-owned tokens.** If you use account-owned API tokens (Manage Account → Account API
+> Tokens) the permissions are the same, but the editor groups them by **policy scope**. Create two
+> policies: one scoped to **Entire Account** with the Account permissions above (Cloudflare Tunnel,
+> Access, Workers R2 Storage, Account API Tokens, Account Settings), and one scoped to
+> **All Domains** (or Specified Domains) with **DNS: Edit** and **Zone: Read**. Zone-level groups
+> such as *DNS* are only listed under a domain scope; the *Account DNS Settings*, *DNS Firewall* and
+> *DNS View* groups shown under Entire Account are different things and do not grant access to
+> records. The operator verifies the account with `GET /accounts/{id}`, which works for both kinds.
 
 ## 3. Install the operator
 
