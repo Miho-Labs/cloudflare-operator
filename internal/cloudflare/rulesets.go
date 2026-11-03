@@ -55,10 +55,86 @@ func (r Rule) Equal(o Rule) bool {
 	if boolOr(r.Enabled, true) != boolOr(o.Enabled, true) {
 		return false
 	}
-	if !reflect.DeepEqual(normalizeJSON(r.ActionParameters), normalizeJSON(o.ActionParameters)) {
+	mine, theirs := normalizeJSON(r.ActionParameters), normalizeJSON(o.ActionParameters)
+	// The API pins the managed ruleset version it executes; ignore it unless the spec set one.
+	if m, ok := mine.(map[string]any); ok {
+		if t, ok := theirs.(map[string]any); ok && m["version"] == nil {
+			delete(t, "version")
+		}
+	}
+	if !looseEqual(mine, theirs) {
 		return false
 	}
-	return reflect.DeepEqual(normalizeJSON(r.Ratelimit), normalizeJSON(o.Ratelimit))
+	return looseEqual(normalizeJSON(r.Ratelimit), normalizeJSON(o.Ratelimit))
+}
+
+// looseEqual compares decoded JSON values, treating a key that is missing on one side as equal
+// to a zero value (false, "", 0, null, empty) on the other. The API echoes defaults the operator
+// omits, and those must not count as drift.
+func looseEqual(a, b any) bool {
+	switch av := a.(type) {
+	case map[string]any:
+		bv, ok := b.(map[string]any)
+		if !ok {
+			return isZeroJSON(a) && isZeroJSON(b)
+		}
+		for k, x := range av {
+			y, present := bv[k]
+			if !present {
+				if !isZeroJSON(x) {
+					return false
+				}
+				continue
+			}
+			if !looseEqual(x, y) {
+				return false
+			}
+		}
+		for k, y := range bv {
+			if _, present := av[k]; !present && !isZeroJSON(y) {
+				return false
+			}
+		}
+		return true
+	case []any:
+		bv, ok := b.([]any)
+		if !ok || len(av) != len(bv) {
+			return isZeroJSON(a) && isZeroJSON(b)
+		}
+		for i := range av {
+			if !looseEqual(av[i], bv[i]) {
+				return false
+			}
+		}
+		return true
+	}
+	if a == nil || b == nil {
+		return isZeroJSON(a) && isZeroJSON(b)
+	}
+	return reflect.DeepEqual(a, b)
+}
+
+func isZeroJSON(v any) bool {
+	switch x := v.(type) {
+	case nil:
+		return true
+	case bool:
+		return !x
+	case string:
+		return x == ""
+	case float64:
+		return x == 0
+	case map[string]any:
+		for _, y := range x {
+			if !isZeroJSON(y) {
+				return false
+			}
+		}
+		return true
+	case []any:
+		return len(x) == 0
+	}
+	return false
 }
 
 func boolOr(b *bool, def bool) bool {

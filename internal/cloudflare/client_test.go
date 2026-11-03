@@ -478,3 +478,46 @@ func TestIPAccessRules(t *testing.T) {
 		t.Fatal("rule should be gone")
 	}
 }
+
+func TestRuleEqualIgnoresEchoedDefaults(t *testing.T) {
+	desired := cloudflare.Rule{
+		Description: "r", Expression: "true", Action: "block",
+		Ratelimit: &cloudflare.RatelimitParams{Characteristics: []string{"ip.src", "cf.colo.id"}, Period: 10, RequestsPerPeriod: 5, MitigationTimeout: 10},
+	}
+	remote := desired
+	remote.ID, remote.Version = "abc", "3"
+	remote.Enabled = ptrBool(true)
+	remote.ActionParameters = map[string]any{"response": map[string]any{"content": "", "status_code": nil}}
+	remoteRL := *desired.Ratelimit
+	remoteRL.RequestsToOrigin = false
+	remoteRL.CountingExpression = ""
+	remote.Ratelimit = &remoteRL
+	if !desired.Equal(remote) {
+		t.Fatal("echoed zero-value fields must not count as drift")
+	}
+	changed := remote
+	changed.ActionParameters = map[string]any{"response": map[string]any{"status_code": float64(429)}}
+	if desired.Equal(changed) {
+		t.Fatal("a real difference must be detected")
+	}
+	changedRL := *desired.Ratelimit
+	changedRL.RequestsToOrigin = true
+	changed = remote
+	changed.Ratelimit = &changedRL
+	if desired.Equal(changed) {
+		t.Fatal("requests_to_origin true vs absent must be detected")
+	}
+	managed := cloudflare.Rule{Description: "m", Expression: "true", Action: "execute",
+		ActionParameters: map[string]any{"id": "x", "overrides": map[string]any{"categories": []map[string]any{{"category": "paranoia-level-3", "enabled": false}}}}}
+	managedRemote := managed
+	managedRemote.ActionParameters = map[string]any{"id": "x", "version": "latest", "overrides": map[string]any{"categories": []map[string]any{{"category": "paranoia-level-3", "enabled": false}}}}
+	if !managed.Equal(managedRemote) {
+		t.Fatal("server-added version must not count as drift")
+	}
+	managedRemote.ActionParameters = map[string]any{"id": "x", "overrides": map[string]any{"categories": []map[string]any{{"category": "paranoia-level-3", "enabled": true}}}}
+	if managed.Equal(managedRemote) {
+		t.Fatal("enabled flip must be detected")
+	}
+}
+
+func ptrBool(b bool) *bool { return &b }
